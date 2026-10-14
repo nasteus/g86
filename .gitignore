@@ -1,0 +1,11 @@
+# Gradle & Android build files
+.gradle/
+build/
+**/build/
+local.properties
+.idea/
+*.iml
+
+# Archives & Binaries
+*.zip
+*.exe

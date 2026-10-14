@@ -1,0 +1,25 @@
+{
+  "name": "Moto G86 Node - Portable Server",
+  "short_name": "G86",
+  "description": "Server portabil autonom gazduit pe Moto G86 Power 5G",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#0A0E17",
+  "theme_color": "#10B981",
+  "icons": [
+    {
+      "src": "icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

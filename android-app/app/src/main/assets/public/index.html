@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="ro">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>g86</title>
+    
+    <!-- PWA Metadata -->
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#10B981">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="G86">
+    <link rel="apple-touch-icon" href="icon-192.png">
+
+    <link rel="stylesheet" href="style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Outfit:wght@300;400;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="background-glow"></div>
+
+    <div class="container">
+        <!-- PWA One-Click Install Banner -->
+        <div id="pwaBanner" class="pwa-banner hidden">
+            <div class="pwa-info">
+                <img src="icon-192.png" alt="G86 Icon" class="pwa-logo">
+                <div>
+                    <strong>Instalează aplicația G86</strong>
+                    <p>Salvează pe ecran direct din browser &bull; Fără Play Store</p>
+                </div>
+            </div>
+            <button id="btnInstallPwa" class="btn btn-pwa btn-sm" onclick="installPwa()">Adaugă pe Ecran</button>
+        </div>
+
+        <!-- Header -->
+        <header class="header">
+            <h1>g86</h1>
+        </header>
+
+        <!-- Auth & Dashboard Container -->
+        <main class="main-card">
+            <!-- Auth Section (Shown when logged out) -->
+            <div id="authSection" class="section-box">
+                <div class="tabs">
+                    <button id="tabLogin" class="tab-btn active" onclick="switchAuthTab('login')">Autentificare</button>
+                    <button id="tabRegister" class="tab-btn" onclick="switchAuthTab('register')">Creare Cont</button>
+                </div>
+
+                <div id="authFeedback" class="feedback-msg hidden"></div>
+
+                <!-- Login Form -->
+                <form id="formLogin" onsubmit="handleLogin(event)">
+                    <div class="form-group">
+                        <label for="loginIdentity">Email sau Nume Utilizator</label>
+                        <input type="text" id="loginIdentity" placeholder="nume@exemplu.com" required autocomplete="username">
+                    </div>
+                    <div class="form-group">
+                        <label for="loginPassword">Parola</label>
+                        <input type="password" id="loginPassword" placeholder="••••••••" required autocomplete="current-password">
+                    </div>
+                    <button type="submit" class="btn btn-primary" id="btnLogin">Intră în Cont</button>
+                </form>
+
+                <!-- Register Form -->
+                <form id="formRegister" class="hidden" onsubmit="handleRegister(event)">
+                    <div class="form-group">
+                        <label for="regEmail">Adresă de Email</label>
+                        <input type="email" id="regEmail" placeholder="nume@exemplu.com" required autocomplete="email">
+                    </div>
+                    <div class="form-group">
+                        <label for="regPassword">Parolă (min. 8 caractere)</label>
+                        <input type="password" id="regPassword" placeholder="••••••••" minlength="8" required autocomplete="new-password">
+                    </div>
+                    <div class="form-group">
+                        <label for="regPasswordConfirm">Confirmă Parola</label>
+                        <input type="password" id="regPasswordConfirm" placeholder="••••••••" minlength="8" required autocomplete="new-password">
+                    </div>
+                    <button type="submit" class="btn btn-primary" id="btnRegister">Creează Contul</button>
+                </form>
+            </div>
+
+            <!-- User Dashboard (Shown when logged in) -->
+            <div id="dashboardSection" class="section-box hidden">
+                <div class="user-bar">
+                    <div class="user-info">
+                        <div class="avatar" id="userAvatar">U</div>
+                        <div>
+                            <span class="user-greeting">Utilizator conectat:</span>
+                            <strong id="userDisplayEmail">user@example.com</strong>
+                        </div>
+                    </div>
+                    <button class="btn btn-secondary btn-sm" onclick="handleLogout()">Deconectare</button>
+                </div>
+
+                <!-- Web Worker Compute Panel -->
+                <div class="worker-card">
+                    <div class="worker-header">
+                        <div>
+                            <h3>⚡ Motor de Calcul Distribuit (Web Worker)</h3>
+                            <p class="worker-desc">Această aplicație rulează calcule complexe pe procesorul dispozitivului <strong>tău</strong> în fundal, fără a bloca interfața sau serverul Moto.</p>
+                        </div>
+                        <span id="workerStatusBadge" class="status-pill idle">Inactiv</span>
+                    </div>
+
+                    <div class="metrics-grid">
+                        <div class="metric-box">
+                            <span class="metric-label">Viteză de calcul</span>
+                            <span class="metric-val" id="metricOps">0</span>
+                            <span class="metric-unit">operațiuni / secundă</span>
+                        </div>
+                        <div class="metric-box">
+                            <span class="metric-label">Calcule efectuate</span>
+                            <span class="metric-val" id="metricTotal">0</span>
+                            <span class="metric-unit">iterații totale</span>
+                        </div>
+                        <div class="metric-box">
+                            <span class="metric-label">Soluții găsite</span>
+                            <span class="metric-val" id="metricMatches">0</span>
+                            <span class="metric-unit">potriviri raportate</span>
+                        </div>
+                        <div class="metric-box">
+                            <span class="metric-label">Thread-uri locale</span>
+                            <span class="metric-val" id="metricThreads">1</span>
+                            <span class="metric-unit">detectate pe telefon</span>
+                        </div>
+                    </div>
+
+                    <div class="worker-controls">
+                        <button id="btnToggleWorker" class="btn btn-success" onclick="toggleWorker()">
+                            <span id="btnWorkerIcon">▶</span> <span id="btnWorkerText">Pornește Web Worker</span>
+                        </button>
+                        <button class="btn btn-secondary" onclick="clearLogs()">Golește Log-uri</button>
+                    </div>
+
+                    <!-- Live Worker Terminal Log -->
+                    <div class="terminal-box">
+                        <div class="terminal-bar">
+                            <span>Console Log / Web Worker Output</span>
+                            <span id="termStatus">Așteaptă comenzi...</span>
+                        </div>
+                        <div class="terminal-body" id="termBody">
+                            <div class="log-line info">[Sistem] Client conectat la nodul Moto G86 Power.</div>
+                            <div class="log-line info">[Sistem] Modulul Web Worker este gata de inițializare.</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+
+        <footer class="footer">
+        </footer>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>

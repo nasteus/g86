@@ -1,0 +1,6 @@
+DataDirectory /data/data/com.motog86.webnode/files/tor_data
+SocksPort 9050
+Log notice file /data/data/com.motog86.webnode/files/tor_data/tor.log
+HiddenServiceDir /data/data/com.motog86.webnode/files/tor_data/hs
+HiddenServicePort 80 127.0.0.1:8080
+HiddenServiceVersion 3
