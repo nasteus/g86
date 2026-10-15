@@ -619,7 +619,7 @@ input:focus {
 .chat-input-box textarea {
     flex: 1;
     min-height: 44px;
-    max-height: 120px;
+    max-height: 240px;
     background: rgba(10, 14, 23, 0.8);
     border: 1px solid var(--border-color);
     padding: 11px 14px;
@@ -627,17 +627,41 @@ input:focus {
     color: var(--text-primary);
     font-family: inherit;
     font-size: 0.92rem;
-    line-height: 1.4;
+    line-height: 1.45;
     resize: none;
     outline: none;
     overflow-y: auto;
-    transition: all 0.2s;
+    transition: border-color 0.2s, box-shadow 0.2s;
     box-sizing: border-box;
+    scrollbar-width: thin;
+    scrollbar-color: #2a364f transparent;
 }
 
 .chat-input-box textarea:focus {
     border-color: var(--accent-emerald);
     box-shadow: 0 0 10px rgba(16, 185, 129, 0.25);
+}
+
+/* Custom dark scrollbar for textarea and chat list */
+.chat-input-box textarea::-webkit-scrollbar,
+.chat-messages-container::-webkit-scrollbar {
+    width: 6px;
+}
+
+.chat-input-box textarea::-webkit-scrollbar-track,
+.chat-messages-container::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.chat-input-box textarea::-webkit-scrollbar-thumb,
+.chat-messages-container::-webkit-scrollbar-thumb {
+    background: #2a364f;
+    border-radius: 4px;
+}
+
+.chat-input-box textarea::-webkit-scrollbar-thumb:hover,
+.chat-messages-container::-webkit-scrollbar-thumb:hover {
+    background: #3e5074;
 }
 
 .btn-chat-sq {
@@ -661,13 +685,26 @@ input:focus {
     background: rgba(6, 182, 212, 0.12);
     border: 1px solid rgba(6, 182, 212, 0.35);
     color: var(--accent-cyan);
-    font-size: 1.25rem;
 }
 
 .btn-attach:hover {
     background: rgba(6, 182, 212, 0.25);
     border-color: var(--accent-cyan);
     transform: translateY(-1px);
+}
+
+.paperclip-svg-icon {
+    width: 20px;
+    height: 20px;
+    stroke: var(--accent-cyan);
+}
+
+.paperclip-svg-icon-sm {
+    width: 16px;
+    height: 16px;
+    stroke: currentColor;
+    display: inline-block;
+    vertical-align: middle;
 }
 
 .btn-send-sq {
