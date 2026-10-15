@@ -162,36 +162,77 @@ def logout_user(client_ip, email=None, disconnect=False):
     })
     save_state(state)
 
-def add_chat_message(msg_bundle, client_ip):
-    state = get_state()
+# In-memory P2P Tracker State (Zero message persistence on server, tracker acts like torrent tracker)
+PEERS = {}
+SIGNAL_BOXES = {}
+
+def announce_peer(peer_id, email, client_ip, user_agent=""):
+    now = time.time()
+    display_ip = client_ip
+    if display_ip in ["127.0.0.1", "::1", "localhost"]:
+        display_ip = "192.168.1.46"
+
+    # Inregistrare client in lista conexiunilor active
+    track_request("GET", f"/api/tracker/announce?email={email or ''}", {}, None, display_ip, user_agent)
+
+    # Curatare peers inactivi > 25s
+    for pid in list(PEERS.keys()):
+        if now - PEERS[pid].get("last_seen", 0) > 25:
+            del PEERS[pid]
+
+    PEERS[peer_id] = {
+        "peerId": peer_id,
+        "email": email,
+        "ip": display_ip,
+        "last_seen": now
+    }
+
+    other_peers = [
+        {"peerId": p["peerId"], "email": p["email"], "ip": p["ip"]}
+        for pid, p in PEERS.items() if pid != peer_id and (now - p["last_seen"] < 25)
+    ]
+    return other_peers
+
+def send_peer_signal(from_peer, to_peer, signal_data, client_ip):
     now = time.time()
     time_str = time.strftime("%H:%M:%S")
-
-    sender = msg_bundle.get("sender", "Anonim")
-    state["chat_messages"].append(msg_bundle)
-    state["chat_messages"] = state["chat_messages"][-100:]
-
-    # Inregistrare in logul utilizatorului
-    if sender not in state["user_logs"]:
-        state["user_logs"][sender] = []
+    if to_peer not in SIGNAL_BOXES:
+        SIGNAL_BOXES[to_peer] = []
     
-    state["user_logs"][sender].append({
-        "time": now,
-        "text": f"[{time_str}] [Chat Criptat] Trimis mesaj securizat AES-256-GCM ({len(msg_bundle.get('ciphertext', ''))} chars)",
-        "type": "success"
+    SIGNAL_BOXES[to_peer].append({
+        "from": from_peer,
+        "data": signal_data,
+        "timestamp": now
     })
+    SIGNAL_BOXES[to_peer] = SIGNAL_BOXES[to_peer][-100:]
 
-    # Log global
-    state["logs"].append({
-        "text": f"[{time_str}] [Chat Criptat] Mesaj recepționat de la {sender} (AES-256-GCM)",
+    sig_type = signal_data.get("type", "P2P_PACKET") if isinstance(signal_data, dict) else "P2P_PACKET"
+
+    state = get_state()
+    user_key = from_peer
+    if from_peer in PEERS and PEERS[from_peer].get("email"):
+        user_key = PEERS[from_peer]["email"]
+    
+    if user_key not in state["user_logs"]:
+        state["user_logs"][user_key] = []
+    
+    state["user_logs"][user_key].append({
         "time": now,
-        "type": "success"
+        "text": f"[{time_str}] [P2P Direct] Transmis pachet către peer ({sig_type})",
+        "type": "info"
     })
+    state["user_logs"][user_key] = state["user_logs"][user_key][-50:]
+
+    state["logs"].append({
+        "text": f"[{time_str}] [P2P Tracker] Semnal {sig_type} ({user_key} ➔ {to_peer[:8]}..)",
+        "time": now,
+        "type": "info"
+    })
+    state["logs"] = state["logs"][-60:]
     save_state(state)
 
-def get_chat_messages():
-    state = get_state()
-    return state.get("chat_messages", [])
+def get_peer_signals(peer_id):
+    return SIGNAL_BOXES.pop(peer_id, [])
 
 def get_active_clients():
     state = get_state()

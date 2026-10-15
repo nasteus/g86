@@ -94,38 +94,76 @@
                     <button class="btn btn-secondary btn-sm" onclick="handleLogout()">Deconectare</button>
                 </div>
 
-                <!-- Encrypted Public Chatroom Panel -->
-                <div class="chat-card">
-                    <div class="chat-header">
+                <!-- Public Chat P2P Accordion Card -->
+                <div class="chat-card" id="chatAccordionCard">
+                    <div class="chat-header" onclick="toggleChatDropdown()">
                         <div class="chat-title-group">
                             <div class="chat-icon-badge">💬</div>
-                            <div>
-                                <h3>Chatroom Public Criptat</h3>
-                                <p class="chat-desc">Toate mesajele sunt criptate la nivel de client cu <strong>AES-256-GCM</strong> înainte de a circula pe rețea.</p>
+                            <div class="chat-title-wrapper">
+                                <h3>Public Chat</h3>
                             </div>
                         </div>
-                        <div class="security-badge">
-                            <span class="sec-dot"></span>
-                            <span>AES-256-GCM Activ</span>
+                        <div class="chat-header-right">
+                            <div class="security-badge">
+                                <span class="sec-dot"></span>
+                                <span>Criptare end-2-end</span>
+                            </div>
+                            <span id="chatDropdownArrow" class="chat-arrow">▼</span>
                         </div>
                     </div>
 
-                    <!-- Chat Messages Stream -->
-                    <div class="chat-messages-container" id="chatContainer">
-                        <div id="chatMessagesList" class="chat-messages-list">
-                            <div class="chat-system-msg">
-                                <span class="lock-icon">🔒</span> Canal securizat inițializat. Toate mesajele dintre utilizatori și nodul g86 sunt criptate criptografic (Web Crypto API).
+                    <!-- Dropdown Body -->
+                    <div id="chatDropdownBody" class="chat-dropdown-body">
+                        <!-- Chat Messages Stream -->
+                        <div class="chat-messages-container" id="chatContainer">
+                            <div id="chatMessagesList" class="chat-messages-list">
+                                <!-- Mesajele vor fi redate dinamic din memoria locală (IndexedDB) -->
                             </div>
                         </div>
-                    </div>
 
-                    <!-- Chat Input Form -->
-                    <form id="formChat" class="chat-input-box" onsubmit="handleSendMessage(event)">
-                        <input type="text" id="inputChatMessage" placeholder="Scrie un mesaj criptat (Enter pentru trimitere)..." required autocomplete="off" maxlength="1000">
-                        <button type="submit" class="btn btn-primary btn-send" id="btnSendMessage">
-                            <span>Trimite</span> 🚀
-                        </button>
-                    </form>
+                        <!-- Editing indicator bar (shown when editing a message) -->
+                        <div id="chatEditingBar" class="chat-edit-bar hidden">
+                            <span>✏️ Mod editare mesaj</span>
+                            <button type="button" class="btn-cancel-edit" onclick="cancelEditingMessage()">✕ Anulează</button>
+                        </div>
+
+                        <!-- Selected File Preview Bar -->
+                        <div id="filePreviewBar" class="file-preview-bar hidden">
+                            <div class="preview-info">
+                                <span id="previewFileIcon">📎</span>
+                                <span id="previewFileName" class="preview-filename"></span>
+                                <span id="previewFileSize" class="preview-filesize"></span>
+                            </div>
+                            <button type="button" class="btn-cancel-file" onclick="clearSelectedFile()" title="Șterge atașamentul">✕</button>
+                        </div>
+
+                        <!-- Chat Input Form -->
+                        <form id="formChat" class="chat-input-box" onsubmit="handleSendMessage(event)">
+                            <input type="file" id="chatFileInput" class="hidden-file-input" onchange="handleFileSelected(event)" accept="image/*,video/*,audio/*,application/pdf,text/*,.doc,.docx,.zip">
+                            <button type="button" class="btn-chat-sq btn-attach" onclick="triggerFileInput()" title="Atașează poză, video sau document">
+                                📎
+                            </button>
+                            <textarea id="inputChatMessage" rows="1" placeholder="Scrie un mesaj..." autocomplete="off"></textarea>
+                            <button type="submit" class="btn-chat-sq btn-send-sq" id="btnSendMessage" title="Trimite mesaj">
+                                <svg viewBox="0 0 24 24" class="send-svg-icon">
+                                    <path fill="currentColor" d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/>
+                                </svg>
+                            </button>
+                        </form>
+                    </div>
+                </div>
+
+                <!-- Action Modal for Message Options (Long-Press / Click) -->
+                <div id="messageActionModal" class="modal-overlay hidden" onclick="closeMessageModal(event)">
+                    <div class="modal-sheet" onclick="event.stopPropagation()">
+                        <div class="modal-header">
+                            <span id="modalMsgTitle">Opțiuni Mesaj</span>
+                            <button type="button" class="modal-close-btn" onclick="closeMessageModal()">✕</button>
+                        </div>
+                        <div class="modal-actions" id="modalActionsContainer">
+                            <!-- Populat dinamic: Editare / Ștergere pentru toți / Ștergere pentru mine -->
+                        </div>
+                    </div>
                 </div>
             </div>
         </main>
