@@ -125,12 +125,46 @@ async function refreshClientRow(ip, email, e) {
     }
 }
 
+// State for open dropdown panels per client
+const openUserLogs = new Set();
+const openUserData = new Set();
+let cachedClients = [];
+
+function toggleUserLogs(clientKey, e) {
+    if (e) e.stopPropagation();
+    if (openUserLogs.has(clientKey)) {
+        openUserLogs.delete(clientKey);
+    } else {
+        openUserLogs.add(clientKey);
+    }
+    renderConnections(cachedClients);
+}
+
+function toggleUserData(clientKey, e) {
+    if (e) e.stopPropagation();
+    if (openUserData.has(clientKey)) {
+        openUserData.delete(clientKey);
+    } else {
+        openUserData.add(clientKey);
+    }
+    renderConnections(cachedClients);
+}
+
+function escapeHtml(text) {
+    if (!text) return '';
+    return String(text)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+}
+
 // Monitor active connections
 let monitorTimer = null;
 function startConnectionsMonitor() {
     if (monitorTimer) clearInterval(monitorTimer);
     fetchActiveConnections();
-    monitorTimer = setInterval(fetchActiveConnections, 3000);
+    monitorTimer = setInterval(fetchActiveConnections, 2000);
 }
 
 async function fetchActiveConnections() {
@@ -157,35 +191,116 @@ async function fetchActiveConnections() {
 }
 
 function renderConnections(clients) {
+    cachedClients = clients || [];
     const title = document.getElementById('titleConnections');
     const list = document.getElementById('connectionsList');
     if (!title || !list) return;
 
-    title.textContent = `Conexiuni active (${clients.length})`;
+    title.textContent = `Conexiuni active (${cachedClients.length})`;
 
-    if (clients.length === 0) {
+    if (cachedClients.length === 0) {
         list.innerHTML = '<div class="empty-state">Nicio conexiune activă în acest moment</div>';
         return;
     }
 
     list.innerHTML = '';
-    clients.forEach(client => {
-        const item = document.createElement('div');
-        item.className = 'connection-item';
-
+    cachedClients.forEach(client => {
+        const clientKey = client.ip;
         const isAuth = client.email && client.email.length > 0;
         const displayUser = isAuth ? client.email : 'Vizitator (Nelogat)';
+        const isLogsOpen = openUserLogs.has(clientKey);
+        const isDataOpen = openUserData.has(clientKey);
 
-        item.innerHTML = `
-            <div class="conn-details">
-                <span class="conn-main ${isAuth ? 'auth' : 'guest'}">${displayUser}  •  ${client.type}  •  ${client.ip}</span>
-                <span class="conn-sub ${isAuth ? 'auth' : 'guest'}">${isAuth ? 'Stare: Autentificat & Activ' : 'Stare: Conectat (Neautentificat)'}</span>
+        const card = document.createElement('div');
+        card.className = 'connection-card';
+        card.id = `card-${clientKey.replace(/[^a-zA-Z0-9]/g, '_')}`;
+
+        // Logs HTML
+        const userLogs = client.logs || [];
+        let logsHtml = '';
+        if (userLogs.length === 0) {
+            logsHtml = '<div class="log-entry system">[Sistem] Așteptare evenimente de la acest utilizator...</div>';
+        } else {
+            logsHtml = userLogs.map(l => {
+                const entryType = l.type || 'info';
+                return `<div class="log-entry ${entryType}">${escapeHtml(l.text)}</div>`;
+            }).join('');
+        }
+
+        card.innerHTML = `
+            <div class="conn-row">
+                <div class="conn-main-info" onclick="toggleUserLogs('${clientKey}', event)" title="Click pentru a extinde/restrânge consola live cu loguri">
+                    <span class="conn-chevron ${isLogsOpen ? 'open' : ''}">▼</span>
+                    <div class="conn-details">
+                        <span class="conn-main ${isAuth ? 'auth' : 'guest'}">
+                            ${escapeHtml(displayUser)}  •  ${escapeHtml(client.type || 'Wi-Fi')}  •  ${escapeHtml(client.ip)}
+                        </span>
+                        <span class="conn-sub ${isAuth ? 'auth' : 'guest'}">
+                            <span class="pulse-dot ${isAuth ? 'auth' : 'guest'}"></span>
+                            ${isAuth ? 'Stare: Autentificat & Activ' : 'Stare: Conectat (Neautentificat)'}
+                            ${client.inactiveSeconds > 0 ? ` • ${client.inactiveSeconds}s în urmă` : ' • Activ acum'}
+                        </span>
+                    </div>
+                </div>
+                <div class="conn-actions">
+                    <button class="btn-refresh-row" onclick="refreshClientRow('${client.ip}', '${client.email || ''}', event)" title="Verifică această conexiune">
+                        🔄
+                    </button>
+                    <button class="btn-user-data ${isDataOpen ? 'active' : ''}" onclick="toggleUserData('${clientKey}', event)" title="Afișează datele utilizatorului">
+                        👤 Date
+                    </button>
+                </div>
             </div>
-            <button class="btn-refresh-row" onclick="refreshClientRow('${client.ip}', '${client.email || ''}', event)" title="Verifică această conexiune">
-                🔄
-            </button>
+
+            <!-- Dropdown 1: Live User Activity Log Console -->
+            <div class="user-logs-panel ${isLogsOpen ? '' : 'hidden'}" id="logs-${clientKey.replace(/[^a-zA-Z0-9]/g, '_')}">
+                <div class="user-logs-header">
+                    <span>CONSOLE LOG LIVE: ${escapeHtml(displayUser)}</span>
+                    <span class="badge-live">LIVE</span>
+                </div>
+                <div class="user-logs-terminal" id="terminal-${clientKey.replace(/[^a-zA-Z0-9]/g, '_')}">
+                    ${logsHtml}
+                </div>
+            </div>
+
+            <!-- Dropdown 2: User Data Profile Card -->
+            <div class="user-data-panel ${isDataOpen ? '' : 'hidden'}" id="data-${clientKey.replace(/[^a-zA-Z0-9]/g, '_')}">
+                <div class="user-data-title">Date profil &amp; detalii sesiune</div>
+                <div class="data-grid">
+                    <div class="data-row">
+                        <span class="data-label">Email / Cont:</span>
+                        <span class="data-val ${isAuth ? 'auth' : 'guest'}">${escapeHtml(client.email || 'Neautentificat (Vizitator)')}</span>
+                    </div>
+                    <div class="data-row">
+                        <span class="data-label">Stare Autentificare:</span>
+                        <span class="data-val ${isAuth ? 'auth' : 'guest'}">${isAuth ? 'Autentificat (Sesiune activă)' : 'Sesiune oaspete'}</span>
+                    </div>
+                    <div class="data-row">
+                        <span class="data-label">IP &amp; Tip Rețea:</span>
+                        <span class="data-val">${escapeHtml(client.ip)} (${escapeHtml(client.type || 'Wi-Fi')})</span>
+                    </div>
+                    <div class="data-row">
+                        <span class="data-label">Securitate Canal:</span>
+                        <span class="data-val secure">🔒 AES-256-GCM / PBKDF2</span>
+                    </div>
+                    <div class="data-row">
+                        <span class="data-label">Browser / User-Agent:</span>
+                        <span class="data-val" title="${escapeHtml(client.userAgent || 'Necunoscut')}">${escapeHtml(client.userAgent || 'Necunoscut')}</span>
+                    </div>
+                    <div class="data-row">
+                        <span class="data-label">Ultimul semnal primit:</span>
+                        <span class="data-val">${client.inactiveSeconds}s în urmă</span>
+                    </div>
+                </div>
+            </div>
         `;
-        list.appendChild(item);
+
+        list.appendChild(card);
+
+        if (isLogsOpen) {
+            const terminal = card.querySelector('.user-logs-terminal');
+            if (terminal) terminal.scrollTop = terminal.scrollHeight;
+        }
     });
 }
 

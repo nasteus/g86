@@ -5,6 +5,7 @@ import urllib.request
 import urllib.error
 import os
 import sys
+import json
 import tracker
 
 PORT = 8686
@@ -16,19 +17,75 @@ class DevHandler(http.server.SimpleHTTPRequestHandler):
         super().__init__(*args, directory=WEB_DIR, **kwargs)
 
     def end_headers(self):
-        # Disable caching for instant hot-reload during development
         self.send_header("Cache-Control", "no-cache, no-store, must-revalidate")
         self.send_header("Pragma", "no-cache")
         self.send_header("Expires", "0")
         super().end_headers()
 
     def do_GET(self):
+        if self.path.startswith("/api/ping"):
+            tracker.track_request("GET", "/api/ping", self.headers, None, self.client_address[0], self.headers.get("User-Agent", ""))
+            res = b'{"status":"ok"}'
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(res)))
+            self.end_headers()
+            self.wfile.write(res)
+            return
+
+        if self.path == "/api/chat/messages":
+            messages = tracker.get_chat_messages()
+            body = json.dumps(messages).encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+            return
+
         if self.path.startswith("/api/") or self.path.startswith("/_/"):
             self.proxy_request("GET")
         else:
             super().do_GET()
 
     def do_POST(self):
+        if self.path.startswith("/api/logout"):
+            content_length = int(self.headers.get("Content-Length", 0))
+            body = self.rfile.read(content_length) if content_length > 0 else b""
+            email = None
+            disconnect = False
+            if body:
+                try:
+                    data = json.loads(body.decode("utf-8", "ignore"))
+                    email = data.get("email")
+                    disconnect = bool(data.get("disconnect", False))
+                except Exception:
+                    pass
+            tracker.logout_user(self.client_address[0], email, disconnect=disconnect)
+            res = json.dumps({"status": "ok", "message": "Logged out"}).encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(res)))
+            self.end_headers()
+            self.wfile.write(res)
+            return
+
+        if self.path == "/api/chat/messages":
+            content_length = int(self.headers.get("Content-Length", 0))
+            body = self.rfile.read(content_length) if content_length > 0 else b""
+            try:
+                msg_bundle = json.loads(body.decode("utf-8", "ignore"))
+                tracker.add_chat_message(msg_bundle, self.client_address[0])
+                res = json.dumps({"status": "ok", "message": "Message saved"}).encode("utf-8")
+            except Exception as e:
+                res = json.dumps({"status": "error", "message": str(e)}).encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(res)))
+            self.end_headers()
+            self.wfile.write(res)
+            return
+
         if self.path.startswith("/api/") or self.path.startswith("/_/"):
             self.proxy_request("POST")
         else:
@@ -57,7 +114,8 @@ class DevHandler(http.server.SimpleHTTPRequestHandler):
         content_length = int(self.headers.get("Content-Length", 0))
         body = self.rfile.read(content_length) if content_length > 0 else None
 
-        tracker.track_request(method, self.path, self.headers, body, self.client_address[0])
+        ua = self.headers.get("User-Agent", "")
+        tracker.track_request(method, self.path, self.headers, body, self.client_address[0], ua)
 
         headers = {}
         for key, val in self.headers.items():

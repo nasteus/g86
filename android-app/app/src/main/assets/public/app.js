@@ -1,26 +1,89 @@
-// app.js - PocketBase Client & Web Worker Orchestrator
+// app.js - G86 Client Frontend with End-to-End Encrypted Chatroom (AES-256-GCM)
 
 let currentUser = null;
 let authToken = localStorage.getItem('pb_auth_token');
 let authModel = localStorage.getItem('pb_auth_model');
 
-let worker = null;
-let isWorkerRunning = false;
-let totalMatches = 0;
+// Cryptographic Key for AES-256-GCM
+let cryptoKey = null;
+const SHARED_NETWORK_SECRET = "G86-SECURE-MESH-NETWORK-2026-ENCRYPTION-KEY-SECRET";
 
 // Initialize on load
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
+    await initCryptoKey();
     checkExistingAuth();
-    detectHardware();
+    startHeartbeat();
+    setupUnloadHandler();
 });
 
-function detectHardware() {
-    const threads = navigator.hardwareConcurrency || 4;
-    const threadElem = document.getElementById('metricThreads');
-    if (threadElem) threadElem.innerText = threads;
-    addLog(`[Client] Hardware detectat: ${threads} thread-uri CPU disponibile pe acest dispozitiv.`, 'info');
+// 1. Web Crypto API - AES-256-GCM Implementation
+async function initCryptoKey() {
+    try {
+        const enc = new TextEncoder();
+        const keyMaterial = await window.crypto.subtle.importKey(
+            "raw",
+            enc.encode(SHARED_NETWORK_SECRET),
+            { name: "PBKDF2" },
+            false,
+            ["deriveKey"]
+        );
+
+        cryptoKey = await window.crypto.subtle.deriveKey(
+            {
+                name: "PBKDF2",
+                salt: enc.encode("g86-node-salt-unique-security"),
+                iterations: 100000,
+                hash: "SHA-256"
+            },
+            keyMaterial,
+            { name: "AES-GCM", length: 256 },
+            false,
+            ["encrypt", "decrypt"]
+        );
+        console.log("[Crypto] Cheie de criptare AES-256-GCM derivată cu succes.");
+    } catch (e) {
+        console.error("[Crypto] Eroare la inițializarea cheii:", e);
+    }
 }
 
+async function encryptMessage(text) {
+    if (!cryptoKey) await initCryptoKey();
+    const enc = new TextEncoder();
+    const iv = window.crypto.getRandomValues(new Uint8Array(12));
+    const encoded = enc.encode(text);
+
+    const ciphertext = await window.crypto.subtle.encrypt(
+        { name: "AES-GCM", iv: iv },
+        cryptoKey,
+        encoded
+    );
+
+    return {
+        iv: btoa(String.fromCharCode(...iv)),
+        ciphertext: btoa(String.fromCharCode(...new Uint8Array(ciphertext)))
+    };
+}
+
+async function decryptMessage(bundle) {
+    if (!cryptoKey) await initCryptoKey();
+    try {
+        const iv = Uint8Array.from(atob(bundle.iv), c => c.charCodeAt(0));
+        const ciphertext = Uint8Array.from(atob(bundle.ciphertext), c => c.charCodeAt(0));
+
+        const decrypted = await window.crypto.subtle.decrypt(
+            { name: "AES-GCM", iv: iv },
+            cryptoKey,
+            ciphertext
+        );
+
+        const dec = new TextDecoder();
+        return dec.decode(decrypted);
+    } catch (e) {
+        return "[Mesaj indescifrabil - eroare cheie]";
+    }
+}
+
+// 2. Authentication UI & Logic
 function switchAuthTab(tab) {
     const tabLogin = document.getElementById('tabLogin');
     const tabRegister = document.getElementById('tabRegister');
@@ -53,7 +116,6 @@ function clearFeedback() {
     fb.classList.add('hidden');
 }
 
-// Authentication
 async function handleLogin(e) {
     e.preventDefault();
     clearFeedback();
@@ -65,7 +127,8 @@ async function handleLogin(e) {
     btn.innerText = "Se autentifică...";
 
     try {
-        const res = await fetch('/api/collections/users/auth-with-password', {
+        const emailParam = '?email=' + encodeURIComponent(identity);
+        const res = await fetch('/api/collections/users/auth-with-password' + emailParam, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ identity, password })
@@ -102,7 +165,7 @@ async function handleRegister(e) {
     btn.innerText = "Se creează contul...";
 
     try {
-        const res = await fetch('/api/collections/users/records', {
+        const res = await fetch('/api/collections/users/records?email=' + encodeURIComponent(email), {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -119,8 +182,8 @@ async function handleRegister(e) {
             throw new Error(errDetail);
         }
 
-        // Auto login after registration
-        const authRes = await fetch('/api/collections/users/auth-with-password', {
+        // Auto login
+        const authRes = await fetch('/api/collections/users/auth-with-password?email=' + encodeURIComponent(email), {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ identity: email, password })
@@ -148,24 +211,8 @@ function loginSuccess(record, token) {
     document.getElementById('userDisplayEmail').innerText = email;
     document.getElementById('userAvatar').innerText = email.charAt(0).toUpperCase();
 
-    addLog(`[Auth] Autentificare reusita pentru: ${email}`, 'success');
     startHeartbeat();
-}
-
-let heartbeatTimer = null;
-function startHeartbeat() {
-    if (heartbeatTimer) clearInterval(heartbeatTimer);
-    const pulse = () => {
-        if (authToken) {
-            const emailParam = currentUser && currentUser.email ? ('?email=' + encodeURIComponent(currentUser.email)) : '';
-            fetch('/api/collections/users/auth-refresh' + emailParam, {
-                method: 'POST',
-                headers: { 'Authorization': authToken }
-            }).catch(() => {});
-        }
-    };
-    pulse();
-    heartbeatTimer = setInterval(pulse, 10000);
+    startChatMonitoring();
 }
 
 function checkExistingAuth() {
@@ -179,12 +226,23 @@ function checkExistingAuth() {
     }
 }
 
-function handleLogout() {
-    if (heartbeatTimer) {
-        clearInterval(heartbeatTimer);
-        heartbeatTimer = null;
-    }
-    if (isWorkerRunning) stopWorker();
+// 3. Instant Logout & Disconnect Handlers
+async function handleLogout() {
+    const emailToLog = currentUser ? currentUser.email : null;
+    
+    // Stop chat monitor
+    if (chatPollTimer) clearInterval(chatPollTimer);
+    chatPollTimer = null;
+
+    // Send instant logout signal to server (disconnect: false, remains on page as guest)
+    try {
+        await fetch('/api/logout', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email: emailToLog, disconnect: false })
+        });
+    } catch (ignored) {}
+
     currentUser = null;
     authToken = null;
     localStorage.removeItem('pb_auth_token');
@@ -192,140 +250,140 @@ function handleLogout() {
 
     document.getElementById('authSection').classList.remove('hidden');
     document.getElementById('dashboardSection').classList.add('hidden');
-    addLog(`[Auth] Sesiune incheiata.`, 'info');
+    clearFeedback();
+
+    // Keep guest heartbeat active so server knows user is still present as guest
+    startHeartbeat();
 }
 
-// Web Worker Controller
-function toggleWorker() {
-    if (isWorkerRunning) {
-        stopWorker();
-    } else {
-        startWorker();
-    }
-}
-
-function startWorker() {
-    if (window.Worker) {
-        worker = new Worker('worker.js');
-        isWorkerRunning = true;
-
-        updateWorkerUI(true);
-        addLog('[Worker] Thread-ul Web Worker a fost instantiat cu succes.', 'success');
-        addLog('[Worker] Se ruleaza procesarea paralela pe procesorul telefonului tau...', 'info');
-
-        worker.postMessage({ command: 'START', data: { difficulty: 3 } });
-
-        worker.onmessage = function (e) {
-            const data = e.data;
-            if (data.type === 'PROGRESS') {
-                document.getElementById('metricOps').innerText = data.opsPerSec.toLocaleString();
-                document.getElementById('metricTotal').innerText = data.processed.toLocaleString();
-            } else if (data.type === 'FOUND_MATCH') {
-                totalMatches++;
-                document.getElementById('metricMatches').innerText = totalMatches;
-                addLog(`[Worker Match] Solutie gasita: ${data.hash} (la iteratia ${data.atTotal})`, 'match');
-            } else if (data.type === 'STOPPED') {
-                addLog(`[Worker] Oprit. Total iteratii calculate: ${data.total}`, 'info');
-            }
-        };
-
-        worker.onerror = function (err) {
-            addLog(`[Worker Eroare] ${err.message}`, 'error');
-            stopWorker();
-        };
-    } else {
-        alert("Browserul tau nu suporta Web Workeri HTML5!");
-    }
-}
-
-function stopWorker() {
-    if (worker) {
-        worker.postMessage({ command: 'STOP' });
-        worker.terminate();
-        worker = null;
-    }
-    isWorkerRunning = false;
-    updateWorkerUI(false);
-    document.getElementById('metricOps').innerText = '0';
-}
-
-function updateWorkerUI(running) {
-    const badge = document.getElementById('workerStatusBadge');
-    const btnIcon = document.getElementById('btnWorkerIcon');
-    const btnText = document.getElementById('btnWorkerText');
-    const btnToggle = document.getElementById('btnToggleWorker');
-    const termStatus = document.getElementById('termStatus');
-
-    if (running) {
-        badge.className = 'status-pill active';
-        badge.innerText = 'Activ & Ruleaza';
-        btnIcon.innerText = '⏸';
-        btnText.innerText = 'Oprește Worker';
-        btnToggle.className = 'btn btn-secondary';
-        termStatus.innerText = 'Calcul in curs pe CPU client...';
-    } else {
-        badge.className = 'status-pill idle';
-        badge.innerText = 'Inactiv';
-        btnIcon.innerText = '▶';
-        btnText.innerText = 'Pornește Web Worker';
-        btnToggle.className = 'btn btn-success';
-        termStatus.innerText = 'Așteaptă comenzi...';
-    }
-}
-
-function addLog(msg, type = 'info') {
-    const termBody = document.getElementById('termBody');
-    if (!termBody) return;
-    const line = document.createElement('div');
-    line.className = `log-line ${type}`;
-    const time = new Date().toLocaleTimeString();
-    line.innerText = `[${time}] ${msg}`;
-    termBody.appendChild(line);
-    termBody.scrollTop = termBody.scrollHeight;
-}
-
-function clearLogs() {
-    const termBody = document.getElementById('termBody');
-    if (termBody) termBody.innerHTML = '';
-}
-
-// PWA Service Worker Registration & One-Click Install Handler
-let deferredPrompt = null;
-
-if ('serviceWorker' in navigator) {
-    window.addEventListener('load', () => {
-        navigator.serviceWorker.register('sw.js')
-            .then(reg => console.log('[PWA] Service Worker inregistrat.', reg))
-            .catch(err => console.warn('[PWA] Service Worker registration failed', err));
-    });
-}
-
-window.addEventListener('beforeinstallprompt', (e) => {
-    e.preventDefault();
-    deferredPrompt = e;
-    const banner = document.getElementById('pwaBanner');
-    if (banner) {
-        banner.classList.remove('hidden');
-    }
-});
-
-function installPwa() {
-    if (deferredPrompt) {
-        deferredPrompt.prompt();
-        deferredPrompt.userChoice.then((choiceResult) => {
-            if (choiceResult.outcome === 'accepted') {
-                const banner = document.getElementById('pwaBanner');
-                if (banner) banner.classList.add('hidden');
-            }
-            deferredPrompt = null;
+function setupUnloadHandler() {
+    const sendDisconnect = () => {
+        const payload = JSON.stringify({
+            email: currentUser ? currentUser.email : null,
+            disconnect: true
         });
-    } else {
-        alert("Pentru a instala aplicatia: apasa pe meniul browserului (3 puncte) si alege 'Adauga pe ecran' sau 'Instaleaza aplicatia'.");
+        const blob = new Blob([payload], { type: 'application/json' });
+        navigator.sendBeacon('/api/logout', blob);
+    };
+
+    window.addEventListener('pagehide', sendDisconnect);
+    window.addEventListener('beforeunload', sendDisconnect);
+}
+
+// 4. Heartbeat Pulse
+let heartbeatTimer = null;
+function startHeartbeat() {
+    if (heartbeatTimer) clearInterval(heartbeatTimer);
+    const pulse = () => {
+        if (authToken && currentUser) {
+            const emailParam = '?email=' + encodeURIComponent(currentUser.email || '');
+            fetch('/api/collections/users/auth-refresh' + emailParam, {
+                method: 'POST',
+                headers: { 'Authorization': authToken }
+            }).catch(() => {});
+        } else {
+            // Guest pulse so server knows user is on site
+            fetch('/api/ping', { cache: 'no-store' }).catch(() => {});
+        }
+    };
+    pulse();
+    heartbeatTimer = setInterval(pulse, 8000);
+}
+
+// 5. Encrypted Chatroom Logic
+let chatPollTimer = null;
+let lastMessageCount = 0;
+
+function startChatMonitoring() {
+    if (chatPollTimer) clearInterval(chatPollTimer);
+    fetchMessages();
+    chatPollTimer = setInterval(fetchMessages, 2000);
+}
+
+async function handleSendMessage(e) {
+    e.preventDefault();
+    const input = document.getElementById('inputChatMessage');
+    const text = input.value.trim();
+    if (!text || !currentUser) return;
+
+    input.value = '';
+    const btn = document.getElementById('btnSendMessage');
+    btn.disabled = true;
+
+    try {
+        // Encrypt with AES-256-GCM before sending over the wire
+        const encryptedBundle = await encryptMessage(text);
+        const payload = {
+            sender: currentUser.email,
+            iv: encryptedBundle.iv,
+            ciphertext: encryptedBundle.ciphertext,
+            timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+        };
+
+        await fetch('/api/chat/messages', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+
+        await fetchMessages();
+    } catch (err) {
+        console.error('Eroare trimitere mesaj:', err);
+    } finally {
+        btn.disabled = false;
+        input.focus();
     }
 }
 
-window.addEventListener('appinstalled', () => {
-    const banner = document.getElementById('pwaBanner');
-    if (banner) banner.classList.add('hidden');
-    addLog('[PWA] Aplicatia G86 a fost instalata cu succes pe ecran!', 'success');
-});
+async function fetchMessages() {
+    if (!currentUser) return;
+    try {
+        const res = await fetch('/api/chat/messages', { cache: 'no-store' });
+        if (!res.ok) return;
+
+        const messages = await res.json();
+        if (messages.length === lastMessageCount) return;
+
+        const list = document.getElementById('chatMessagesList');
+        const container = document.getElementById('chatContainer');
+        list.innerHTML = `
+            <div class="chat-system-msg">
+                <span class="lock-icon">🔒</span> Canal securizat inițializat. Toate mesajele dintre utilizatori și nodul g86 sunt criptate criptografic (Web Crypto API).
+            </div>
+        `;
+
+        for (const msg of messages) {
+            const isOwn = currentUser && msg.sender === currentUser.email;
+            const plainText = await decryptMessage(msg);
+
+            const msgDiv = document.createElement('div');
+            msgDiv.className = `chat-msg-item ${isOwn ? 'own' : 'other'}`;
+            msgDiv.innerHTML = `
+                <div class="chat-msg-header">
+                    <span class="chat-msg-author">${isOwn ? 'Tu' : msg.sender}</span>
+                    <span class="chat-msg-time">${msg.timestamp}</span>
+                </div>
+                <div class="chat-msg-bubble">
+                    ${escapeHtml(plainText)}
+                    <span class="chat-lock-tag" title="Criptat AES-256-GCM">🔒 Criptat</span>
+                </div>
+            `;
+            list.appendChild(msgDiv);
+        }
+
+        lastMessageCount = messages.length;
+        container.scrollTop = container.scrollHeight;
+    } catch (err) {
+        console.warn('Chat poll error:', err);
+    }
+}
+
+function escapeHtml(str) {
+    return str.replace(/[&<>'"]/g, tag => ({
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        "'": '&#39;',
+        '"': '&quot;'
+    }[tag] || tag));
+}

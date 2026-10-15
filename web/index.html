@@ -94,57 +94,38 @@
                     <button class="btn btn-secondary btn-sm" onclick="handleLogout()">Deconectare</button>
                 </div>
 
-                <!-- Web Worker Compute Panel -->
-                <div class="worker-card">
-                    <div class="worker-header">
-                        <div>
-                            <h3>⚡ Motor de Calcul Distribuit (Web Worker)</h3>
-                            <p class="worker-desc">Această aplicație rulează calcule complexe pe procesorul dispozitivului <strong>tău</strong> în fundal, fără a bloca interfața sau serverul Moto.</p>
+                <!-- Encrypted Public Chatroom Panel -->
+                <div class="chat-card">
+                    <div class="chat-header">
+                        <div class="chat-title-group">
+                            <div class="chat-icon-badge">💬</div>
+                            <div>
+                                <h3>Chatroom Public Criptat</h3>
+                                <p class="chat-desc">Toate mesajele sunt criptate la nivel de client cu <strong>AES-256-GCM</strong> înainte de a circula pe rețea.</p>
+                            </div>
                         </div>
-                        <span id="workerStatusBadge" class="status-pill idle">Inactiv</span>
-                    </div>
-
-                    <div class="metrics-grid">
-                        <div class="metric-box">
-                            <span class="metric-label">Viteză de calcul</span>
-                            <span class="metric-val" id="metricOps">0</span>
-                            <span class="metric-unit">operațiuni / secundă</span>
-                        </div>
-                        <div class="metric-box">
-                            <span class="metric-label">Calcule efectuate</span>
-                            <span class="metric-val" id="metricTotal">0</span>
-                            <span class="metric-unit">iterații totale</span>
-                        </div>
-                        <div class="metric-box">
-                            <span class="metric-label">Soluții găsite</span>
-                            <span class="metric-val" id="metricMatches">0</span>
-                            <span class="metric-unit">potriviri raportate</span>
-                        </div>
-                        <div class="metric-box">
-                            <span class="metric-label">Thread-uri locale</span>
-                            <span class="metric-val" id="metricThreads">1</span>
-                            <span class="metric-unit">detectate pe telefon</span>
+                        <div class="security-badge">
+                            <span class="sec-dot"></span>
+                            <span>AES-256-GCM Activ</span>
                         </div>
                     </div>
 
-                    <div class="worker-controls">
-                        <button id="btnToggleWorker" class="btn btn-success" onclick="toggleWorker()">
-                            <span id="btnWorkerIcon">▶</span> <span id="btnWorkerText">Pornește Web Worker</span>
+                    <!-- Chat Messages Stream -->
+                    <div class="chat-messages-container" id="chatContainer">
+                        <div id="chatMessagesList" class="chat-messages-list">
+                            <div class="chat-system-msg">
+                                <span class="lock-icon">🔒</span> Canal securizat inițializat. Toate mesajele dintre utilizatori și nodul g86 sunt criptate criptografic (Web Crypto API).
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Chat Input Form -->
+                    <form id="formChat" class="chat-input-box" onsubmit="handleSendMessage(event)">
+                        <input type="text" id="inputChatMessage" placeholder="Scrie un mesaj criptat (Enter pentru trimitere)..." required autocomplete="off" maxlength="1000">
+                        <button type="submit" class="btn btn-primary btn-send" id="btnSendMessage">
+                            <span>Trimite</span> 🚀
                         </button>
-                        <button class="btn btn-secondary" onclick="clearLogs()">Golește Log-uri</button>
-                    </div>
-
-                    <!-- Live Worker Terminal Log -->
-                    <div class="terminal-box">
-                        <div class="terminal-bar">
-                            <span>Console Log / Web Worker Output</span>
-                            <span id="termStatus">Așteaptă comenzi...</span>
-                        </div>
-                        <div class="terminal-body" id="termBody">
-                            <div class="log-line info">[Sistem] Client conectat la nodul Moto G86 Power.</div>
-                            <div class="log-line info">[Sistem] Modulul Web Worker este gata de inițializare.</div>
-                        </div>
-                    </div>
+                    </form>
                 </div>
             </div>
         </main>
