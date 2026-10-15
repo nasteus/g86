@@ -1,45 +1,49 @@
-// app.js - G86 Client Frontend with P2P Torrent-Style Mesh Chat & Media Sharing (AES-256-GCM E2E)
+// app.js - G86 Edge Real-Time Multi-Device Chat & Media Sharing (PocketBase SSE + IndexedDB)
 
 let currentUser = null;
 let authToken = localStorage.getItem('pb_auth_token');
 let authModel = localStorage.getItem('pb_auth_model');
 
-// Cryptographic Key for AES-256-GCM
-let cryptoKey = null;
-const SHARED_NETWORK_SECRET = "G86-SECURE-MESH-NETWORK-2026-ENCRYPTION-KEY-SECRET";
-
 // Local IndexedDB Database
-const DB_NAME = 'G86_P2P_LOCAL_STORE';
-const DB_VERSION = 1;
+const DB_NAME = 'G86_LOCAL_STORE';
+const DB_VERSION = 2;
 let localDb = null;
 
-// P2P Tracker State
-let myPeerId = localStorage.getItem('g86_p2p_peer_id');
-if (!myPeerId) {
-    myPeerId = 'peer_' + Math.random().toString(36).substring(2, 9) + '_' + Date.now().toString(36);
-    localStorage.setItem('g86_p2p_peer_id', myPeerId);
-}
-let activePeers = [];
-let trackerTimer = null;
+// Chat & Sync State
 let knownMessageIds = new Set();
 let currentEditingMsgId = null;
 let currentSelectedFile = null;
 let activeModalMsgId = null;
 let isChatOpen = true;
+let sseConnection = null;
+let sseClientId = null;
+let syncPollingTimer = null;
+let heartbeatTimer = null;
 
-// Initialize on load
+// Unique Peer ID for this browser tab/device
+let myPeerId = localStorage.getItem('g86_client_peer_id');
+if (!myPeerId) {
+    myPeerId = 'c_' + Math.random().toString(36).substring(2, 8);
+    localStorage.setItem('g86_client_peer_id', myPeerId);
+}
+
+// Scope state (Public vs Private)
+let currentChatScope = 'public';
+let currentRecipient = '';
+
+// Initialize on DOM ready
 document.addEventListener('DOMContentLoaded', async () => {
-    await initCryptoKey();
     await initLocalDatabase();
     setupTextareaHandlers();
     checkExistingAuth();
     startHeartbeat();
-    setupUnloadHandler();
     await renderAllMessages();
-    startP2PTracker();
+    startRealtimeSync();
 });
 
-// 1. IndexedDB Local Storage Manager (Zero messages lost, persistent on device)
+// =========================================================================
+// 1. IndexedDB Local Storage Manager (Zero messages lost, fast offline UI)
+// =========================================================================
 function initLocalDatabase() {
     return new Promise((resolve) => {
         const req = indexedDB.open(DB_NAME, DB_VERSION);
@@ -48,6 +52,7 @@ function initLocalDatabase() {
             if (!database.objectStoreNames.contains('messages')) {
                 const store = database.createObjectStore('messages', { keyPath: 'id' });
                 store.createIndex('timestamp', 'timestamp', { unique: false });
+                store.createIndex('pbId', 'pbId', { unique: false });
             }
         };
         req.onsuccess = (e) => {
@@ -55,7 +60,7 @@ function initLocalDatabase() {
             resolve(localDb);
         };
         req.onerror = (e) => {
-            console.error('[IndexedDB] Eroare inițializare DB:', e);
+            console.error('[IndexedDB] Eroare initializare DB:', e);
             resolve(null);
         };
     });
@@ -64,38 +69,50 @@ function initLocalDatabase() {
 function dbSaveMessage(msg) {
     return new Promise((resolve) => {
         if (!localDb) return resolve(false);
-        const tx = localDb.transaction('messages', 'readwrite');
-        const store = tx.objectStore('messages');
-        const req = store.put(msg);
-        req.onsuccess = () => resolve(true);
-        req.onerror = () => resolve(false);
+        try {
+            const tx = localDb.transaction('messages', 'readwrite');
+            const store = tx.objectStore('messages');
+            const req = store.put(msg);
+            req.onsuccess = () => resolve(true);
+            req.onerror = () => resolve(false);
+        } catch (e) {
+            resolve(false);
+        }
     });
 }
 
 function dbGetAllMessages() {
     return new Promise((resolve) => {
         if (!localDb) return resolve([]);
-        const tx = localDb.transaction('messages', 'readonly');
-        const store = tx.objectStore('messages');
-        const req = store.getAll();
-        req.onsuccess = () => {
-            const all = req.result || [];
-            const visible = all.filter(m => !m.deletedForMe);
-            visible.sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
-            resolve(visible);
-        };
-        req.onerror = () => resolve([]);
+        try {
+            const tx = localDb.transaction('messages', 'readonly');
+            const store = tx.objectStore('messages');
+            const req = store.getAll();
+            req.onsuccess = () => {
+                const all = req.result || [];
+                const visible = all.filter(m => !m.deletedForMe && !m.deleted);
+                visible.sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
+                resolve(visible);
+            };
+            req.onerror = () => resolve([]);
+        } catch (e) {
+            resolve([]);
+        }
     });
 }
 
 function dbGetMessage(id) {
     return new Promise((resolve) => {
         if (!localDb) return resolve(null);
-        const tx = localDb.transaction('messages', 'readonly');
-        const store = tx.objectStore('messages');
-        const req = store.get(id);
-        req.onsuccess = () => resolve(req.result || null);
-        req.onerror = () => resolve(null);
+        try {
+            const tx = localDb.transaction('messages', 'readonly');
+            const store = tx.objectStore('messages');
+            const req = store.get(id);
+            req.onsuccess = () => resolve(req.result || null);
+            req.onerror = () => resolve(null);
+        } catch (e) {
+            resolve(null);
+        }
     });
 }
 
@@ -113,83 +130,21 @@ function dbDeleteMessageForMe(id) {
 function dbDeleteMessageAll(id) {
     return new Promise((resolve) => {
         if (!localDb) return resolve(false);
-        const tx = localDb.transaction('messages', 'readwrite');
-        const store = tx.objectStore('messages');
-        const req = store.delete(id);
-        req.onsuccess = () => resolve(true);
-        req.onerror = () => resolve(false);
+        try {
+            const tx = localDb.transaction('messages', 'readwrite');
+            const store = tx.objectStore('messages');
+            const req = store.delete(id);
+            req.onsuccess = () => resolve(true);
+            req.onerror = () => resolve(false);
+        } catch (e) {
+            resolve(false);
+        }
     });
 }
 
-// 2. Web Crypto API - AES-256-GCM Implementation
-async function initCryptoKey() {
-    try {
-        const enc = new TextEncoder();
-        const keyMaterial = await window.crypto.subtle.importKey(
-            "raw",
-            enc.encode(SHARED_NETWORK_SECRET),
-            { name: "PBKDF2" },
-            false,
-            ["deriveKey"]
-        );
-
-        cryptoKey = await window.crypto.subtle.deriveKey(
-            {
-                name: "PBKDF2",
-                salt: enc.encode("g86-node-salt-unique-security"),
-                iterations: 100000,
-                hash: "SHA-256"
-            },
-            keyMaterial,
-            { name: "AES-GCM", length: 256 },
-            false,
-            ["encrypt", "decrypt"]
-        );
-        console.log("[Crypto] Cheie de criptare AES-256-GCM derivată cu succes.");
-    } catch (e) {
-        console.error("[Crypto] Eroare la inițializarea cheii:", e);
-    }
-}
-
-async function encryptPayload(dataObj) {
-    if (!cryptoKey) await initCryptoKey();
-    const enc = new TextEncoder();
-    const jsonStr = JSON.stringify(dataObj);
-    const iv = window.crypto.getRandomValues(new Uint8Array(12));
-    const encoded = enc.encode(jsonStr);
-
-    const ciphertext = await window.crypto.subtle.encrypt(
-        { name: "AES-GCM", iv: iv },
-        cryptoKey,
-        encoded
-    );
-
-    return {
-        iv: btoa(String.fromCharCode(...iv)),
-        ciphertext: btoa(String.fromCharCode(...new Uint8Array(ciphertext)))
-    };
-}
-
-async function decryptPayload(bundle) {
-    if (!cryptoKey) await initCryptoKey();
-    try {
-        const iv = Uint8Array.from(atob(bundle.iv), c => c.charCodeAt(0));
-        const ciphertext = Uint8Array.from(atob(bundle.ciphertext), c => c.charCodeAt(0));
-
-        const decrypted = await window.crypto.subtle.decrypt(
-            { name: "AES-GCM", iv: iv },
-            cryptoKey,
-            ciphertext
-        );
-
-        const dec = new TextDecoder();
-        return JSON.parse(dec.decode(decrypted));
-    } catch (e) {
-        return null;
-    }
-}
-
-// 2. Authentication UI & Logic
+// =========================================================================
+// 2. Authentication UI & Logic (PocketBase Users Collection)
+// =========================================================================
 function switchAuthTab(tab) {
     const tabLogin = document.getElementById('tabLogin');
     const tabRegister = document.getElementById('tabRegister');
@@ -212,14 +167,15 @@ function switchAuthTab(tab) {
 
 function showFeedback(msg, type = 'error') {
     const fb = document.getElementById('authFeedback');
-    fb.className = `feedback-msg ${type}`;
+    if (!fb) return;
+    fb.className = 'feedback-msg ' + type;
     fb.innerText = msg;
     fb.classList.remove('hidden');
 }
 
 function clearFeedback() {
     const fb = document.getElementById('authFeedback');
-    fb.classList.add('hidden');
+    if (fb) fb.classList.add('hidden');
 }
 
 async function handleLogin(e) {
@@ -230,7 +186,7 @@ async function handleLogin(e) {
 
     const btn = document.getElementById('btnLogin');
     btn.disabled = true;
-    btn.innerText = "Se autentifică...";
+    btn.innerText = 'Se autentifica...';
 
     try {
         const emailParam = '?email=' + encodeURIComponent(identity);
@@ -250,7 +206,7 @@ async function handleLogin(e) {
         showFeedback(err.message, 'error');
     } finally {
         btn.disabled = false;
-        btn.innerText = "Intră în Cont";
+        btn.innerText = 'Intra in Cont';
     }
 }
 
@@ -262,13 +218,13 @@ async function handleRegister(e) {
     const passwordConfirm = document.getElementById('regPasswordConfirm').value;
 
     if (password !== passwordConfirm) {
-        showFeedback("Parolele introduse nu coincid!", 'error');
+        showFeedback('Parolele introduse nu coincid!', 'error');
         return;
     }
 
     const btn = document.getElementById('btnRegister');
     btn.disabled = true;
-    btn.innerText = "Se creează contul...";
+    btn.innerText = 'Se creeaza contul...';
 
     try {
         const res = await fetch('/api/collections/users/records?email=' + encodeURIComponent(email), {
@@ -288,7 +244,6 @@ async function handleRegister(e) {
             throw new Error(errDetail);
         }
 
-        // Auto login
         const authRes = await fetch('/api/collections/users/auth-with-password?email=' + encodeURIComponent(email), {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -300,7 +255,7 @@ async function handleRegister(e) {
         showFeedback(err.message, 'error');
     } finally {
         btn.disabled = false;
-        btn.innerText = "Creează Contul";
+        btn.innerText = 'Creeaza Contul';
     }
 }
 
@@ -319,7 +274,7 @@ function loginSuccess(record, token) {
 
     startHeartbeat();
     renderAllMessages();
-    startP2PTracker();
+    startRealtimeSync();
 }
 
 function checkExistingAuth() {
@@ -333,23 +288,7 @@ function checkExistingAuth() {
     }
 }
 
-// 3. Instant Logout & Disconnect Handlers
-async function handleLogout() {
-    const emailToLog = currentUser ? currentUser.email : null;
-    
-    // Stop P2P tracker
-    if (trackerTimer) clearInterval(trackerTimer);
-    trackerTimer = null;
-
-    // Send instant logout signal to server
-    try {
-        await fetch('/api/logout', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ email: emailToLog, disconnect: false })
-        });
-    } catch (ignored) {}
-
+function handleLogout() {
     currentUser = null;
     authToken = null;
     localStorage.removeItem('pb_auth_token');
@@ -362,155 +301,283 @@ async function handleLogout() {
     startHeartbeat();
 }
 
-function setupUnloadHandler() {
-    const sendDisconnect = () => {
-        const payload = JSON.stringify({
-            email: currentUser ? currentUser.email : null,
-            disconnect: true
-        });
-        const blob = new Blob([payload], { type: 'application/json' });
-        navigator.sendBeacon('/api/logout', blob);
-    };
-
-    window.addEventListener('pagehide', sendDisconnect);
-    window.addEventListener('beforeunload', sendDisconnect);
-}
-
-// 4. Heartbeat Pulse
-let heartbeatTimer = null;
+// =========================================================================
+// 3. Heartbeat Pulse (Keeps client active and visible on phone screen)
+// =========================================================================
 function startHeartbeat() {
     if (heartbeatTimer) clearInterval(heartbeatTimer);
     const pulse = () => {
-        if (authToken && currentUser) {
-            const emailParam = '?email=' + encodeURIComponent(currentUser.email || '');
-            fetch('/api/collections/users/auth-refresh' + emailParam, {
-                method: 'POST',
-                headers: { 'Authorization': authToken }
-            }).catch(() => {});
-        } else {
-            fetch('/api/ping', { cache: 'no-store' }).catch(() => {});
-        }
+        const userEmailOrGuest = currentUser ? (currentUser.email || currentUser.username) : 'Vizitator';
+        // Interogare rapida ce lasa o urma clara in jurnalul de conexiuni active
+        const url = '/api/collections/messages/records?perPage=1&u=' + encodeURIComponent(userEmailOrGuest) + '&peer=' + encodeURIComponent(myPeerId);
+        fetch(url, { cache: 'no-store' }).catch(() => {});
     };
     pulse();
-    heartbeatTimer = setInterval(pulse, 8000);
+    heartbeatTimer = setInterval(pulse, 6000);
 }
 
-// 5. P2P BitTorrent-Style Tracker & Mesh Synchronization (Zero Server Payload Storage)
-function startP2PTracker() {
-    if (trackerTimer) clearInterval(trackerTimer);
-    p2pTrackerCycle();
-    trackerTimer = setInterval(p2pTrackerCycle, 2500);
+// =========================================================================
+// 4. Scope Selection (Public vs Private)
+// =========================================================================
+function setChatScope(scope) {
+    currentChatScope = scope;
+    const btnPublic = document.getElementById('btnScopePublic');
+    const btnPrivate = document.getElementById('btnScopePrivate');
+    const inputRec = document.getElementById('inputRecipient');
+
+    if (scope === 'public') {
+        if (btnPublic) {
+            btnPublic.className = 'btn-scope-pill active';
+        }
+        if (btnPrivate) {
+            btnPrivate.className = 'btn-scope-pill';
+        }
+        if (inputRec) {
+            inputRec.classList.add('hidden');
+            currentRecipient = '';
+        }
+    } else {
+        if (btnPublic) {
+            btnPublic.className = 'btn-scope-pill';
+        }
+        if (btnPrivate) {
+            btnPrivate.className = 'btn-scope-pill private-active';
+        }
+        if (inputRec) {
+            inputRec.classList.remove('hidden');
+            inputRec.focus();
+        }
+    }
 }
 
-async function p2pTrackerCycle() {
-    await announceToTracker();
-    await checkIncomingSignals();
+// =========================================================================
+// 5. Real-Time PocketBase Synchronization (SSE + Short Polling Reconcile)
+// =========================================================================
+function startRealtimeSync() {
+    initSSE();
+    syncMessagesFromServer();
+    if (syncPollingTimer) clearInterval(syncPollingTimer);
+    syncPollingTimer = setInterval(syncMessagesFromServer, 2000);
 }
 
-async function announceToTracker() {
-    const email = currentUser ? currentUser.email : '';
+function initSSE() {
+    if (sseConnection) {
+        try { sseConnection.close(); } catch (e) {}
+    }
+
     try {
-        const res = await fetch(`/api/tracker/announce?peerId=${encodeURIComponent(myPeerId)}&email=${encodeURIComponent(email)}`, { cache: 'no-store' });
-        if (!res.ok) return;
-        const data = await res.json();
-        const latestPeers = data.peers || [];
+        sseConnection = new EventSource('/api/realtime');
 
-        // Detect new peers to initiate P2P history synchronization
-        latestPeers.forEach(peer => {
-            const isKnown = activePeers.some(p => p.peerId === peer.peerId);
-            if (!isKnown) {
-                // Request sync from newly discovered peer
-                sendP2PSignal(peer.peerId, {
-                    type: 'SYNC_REQUEST',
-                    knownIds: Array.from(knownMessageIds)
+        sseConnection.addEventListener('PB_CONNECT', async (e) => {
+            try {
+                const data = JSON.parse(e.data);
+                sseClientId = data.clientId;
+                await fetch('/api/realtime', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        clientId: sseClientId,
+                        subscriptions: ['messages/*']
+                    })
                 });
+            } catch (err) {
+                console.warn('[SSE] Eroare abonare:', err);
             }
         });
 
-        activePeers = latestPeers;
+        sseConnection.onmessage = async (e) => {
+            try {
+                const data = JSON.parse(e.data);
+                if (data && data.record) {
+                    const changed = await processIncomingRecord(data.action, data.record);
+                    if (changed) {
+                        await renderAllMessages();
+                    }
+                }
+            } catch (err) {}
+        };
+
+        sseConnection.onerror = () => {
+            if (sseConnection) {
+                try { sseConnection.close(); } catch (e) {}
+                sseConnection = null;
+            }
+            setTimeout(initSSE, 5000);
+        };
     } catch (e) {
-        // Silent fail
+        console.warn('[SSE] Fallback la polling activ:', e);
     }
 }
 
-async function sendP2PSignal(toPeerId, dataPayload) {
+let isSyncing = false;
+
+async function syncMessagesFromServer() {
+    if (isSyncing) return;
+    isSyncing = true;
     try {
-        await fetch('/api/tracker/signal', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                from: myPeerId,
-                to: toPeerId,
-                data: dataPayload
-            })
-        });
-    } catch (e) {
-        console.warn('[P2P] Eroare semnalizare către peer:', e);
-    }
-}
+        const userEmailOrGuest = currentUser ? (currentUser.email || currentUser.username) : 'Vizitator';
+        const localBefore = await dbGetAllMessages();
 
-function broadcastP2P(dataPayload) {
-    activePeers.forEach(peer => {
-        sendP2PSignal(peer.peerId, dataPayload);
-    });
-}
-
-async function checkIncomingSignals() {
-    try {
-        const res = await fetch(`/api/tracker/signals?peerId=${encodeURIComponent(myPeerId)}`, { cache: 'no-store' });
-        if (!res.ok) return;
-        const result = await res.json();
-        const signals = result.signals || [];
-
-        for (const sig of signals) {
-            await handleP2PSignal(sig);
-        }
-    } catch (e) {
-        // Silent fail
-    }
-}
-
-async function handleP2PSignal(sig) {
-    const fromPeer = sig.from;
-    const packet = sig.data;
-    if (!packet || !packet.type) return;
-
-    if (packet.type === 'SYNC_REQUEST') {
-        // A peer wants to sync: compare known message IDs and send missing ones from local IndexedDB
-        const remoteKnown = new Set(packet.knownIds || []);
-        const myLocalMsgs = await dbGetAllMessages();
-        for (const msg of myLocalMsgs) {
-            if (!remoteKnown.has(msg.id)) {
-                const encrypted = await encryptPayload(msg);
-                sendP2PSignal(fromPeer, {
-                    type: 'SYNC_RESPONSE',
-                    bundle: encrypted
-                });
+        // 0. AUTO-BACKFILL / MESH SEED: Daca acest dispozitiv (ex. PC) are mesaje sau fisiere create local care nu au ajuns pe trackerul central G86 (nu au pbId), le impinge automat catre feed-ul central PocketBase!
+        for (const unposted of localBefore) {
+            if (!unposted.pbId && !unposted.deleted) {
+                try {
+                    const postRes = await fetch('/api/collections/messages/records', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            msgId: unposted.id,
+                            sender: unposted.sender || 'Anonim',
+                            text: unposted.text || '',
+                            file: unposted.file || null,
+                            timeStr: unposted.timeStr || '',
+                            timestamp: unposted.timestamp || Date.now(),
+                            scope: unposted.scope || 'public',
+                            recipient: unposted.recipient || '',
+                            edited: !!unposted.edited,
+                            deleted: false
+                        })
+                    });
+                    if (postRes.ok) {
+                        const sRecord = await postRes.json();
+                        if (sRecord && sRecord.id) {
+                            unposted.pbId = sRecord.id;
+                            await dbSaveMessage(unposted);
+                        }
+                    }
+                } catch (err) {}
             }
         }
-    } else if (packet.type === 'SYNC_RESPONSE' || packet.type === 'NEW_MESSAGE') {
-        const decryptedMsg = await decryptPayload(packet.bundle);
-        if (decryptedMsg && decryptedMsg.id && !knownMessageIds.has(decryptedMsg.id)) {
-            await dbSaveMessage(decryptedMsg);
-            knownMessageIds.add(decryptedMsg.id);
+
+        // Determinam markerul de checkpoint temporal (cel mai recent mesaj detinut local)
+        const highestLocalTimestamp = localBefore.reduce((max, m) => Math.max(max, m.timestamp || 0), 0);
+        let hasChanges = false;
+
+        // =========================================================================
+        // VALUL 1: Intervalul Offline (Time-Window Catch-up bazat pe Marker)
+        // - Trimite markerul temporal catre tracker si descarca DOAR ce a aparut in perioada offline
+        // =========================================================================
+        if (highestLocalTimestamp > 0) {
+            const deltaUrl = '/api/collections/messages/records?filter=' + encodeURIComponent("(timestamp > " + highestLocalTimestamp + ")") +
+                             '&sort=timestamp&perPage=200&u=' + encodeURIComponent(userEmailOrGuest) + '&peer=' + encodeURIComponent(myPeerId);
+            const deltaRes = await fetch(deltaUrl, { cache: 'no-store' });
+            if (deltaRes.ok) {
+                const deltaData = await deltaRes.json();
+                const deltaItems = deltaData.items || [];
+                for (const item of deltaItems) {
+                    const ch = await processIncomingRecord('sync', item);
+                    if (ch) hasChanges = true;
+                }
+            }
+        }
+
+        // =========================================================================
+        // VALUL 2: Reconciliere Bitfield / Audit Ledger de Evenimente
+        // - Verifica starea generala din feed-ul central (identifica stergeri, editari, piese lipsa)
+        // =========================================================================
+        const fullUrl = '/api/collections/messages/records?sort=timestamp&perPage=200&u=' + encodeURIComponent(userEmailOrGuest) + '&peer=' + encodeURIComponent(myPeerId);
+        const fullRes = await fetch(fullUrl, { cache: 'no-store' });
+        if (fullRes.ok) {
+            const fullData = await fullRes.json();
+            const serverRecords = fullData.items || [];
+
+            const serverPbIds = new Set(serverRecords.map(r => r.id));
+            const serverMsgIds = new Set(serverRecords.map(r => r.msgId || ('msg_' + r.id)));
+
+            // 2A. Curatare mesaje sterse de la distanta de alti utilizatori cat timp am fost offline
+            const currentLocal = await dbGetAllMessages();
+            for (const locMsg of currentLocal) {
+                if (locMsg.pbId && !serverPbIds.has(locMsg.pbId) && !serverMsgIds.has(locMsg.id)) {
+                    await dbDeleteMessageAll(locMsg.id);
+                    knownMessageIds.delete(locMsg.id);
+                    hasChanges = true;
+                }
+            }
+
+            // 2B. Asimilare noutati sau editari din registrul central
+            for (const rec of serverRecords) {
+                const ch = await processIncomingRecord('sync', rec);
+                if (ch) hasChanges = true;
+            }
+        }
+
+        if (hasChanges) {
             await renderAllMessages();
         }
-    } else if (packet.type === 'EDIT_MESSAGE') {
-        const msg = await dbGetMessage(packet.msgId);
-        if (msg) {
-            msg.text = packet.newText;
-            msg.edited = true;
-            await dbSaveMessage(msg);
-            await renderAllMessages();
-        }
-    } else if (packet.type === 'DELETE_MESSAGE_ALL') {
-        await dbDeleteMessageAll(packet.msgId);
-        knownMessageIds.delete(packet.msgId);
-        await renderAllMessages();
+    } catch (e) {
+        // Dispozitiv offline
+    } finally {
+        isSyncing = false;
     }
 }
 
-// 6. Chat Messages Rendering (From Device Local Storage)
+async function processIncomingRecord(action, record) {
+    if (!record) return false;
+    const recId = record.msgId || ('msg_' + record.id);
+    const pbId = record.id;
+
+    if (action === 'delete' || record.deleted) {
+        const existing = await dbGetMessage(recId);
+        if (existing) {
+            await dbDeleteMessageAll(recId);
+            knownMessageIds.delete(recId);
+            return true;
+        }
+        return false;
+    }
+
+    const existing = await dbGetMessage(recId);
+    if (!existing) {
+        const newMsg = {
+            id: recId,
+            pbId: pbId,
+            sender: record.sender || 'Anonim',
+            text: record.text || '',
+            file: record.file || null,
+            timeStr: record.timeStr || '',
+            timestamp: record.timestamp || Date.now(),
+            scope: record.scope || (record.file && record.file.scope) || 'public',
+            recipient: record.recipient || (record.file && record.file.targetUser) || '',
+            edited: !!record.edited,
+            deleted: false,
+            deletedForMe: false
+        };
+        await dbSaveMessage(newMsg);
+        knownMessageIds.add(recId);
+        return true;
+    } else {
+        let modified = false;
+        if (!existing.pbId && pbId) {
+            existing.pbId = pbId;
+            modified = true;
+        }
+        if (existing.text !== record.text) {
+            existing.text = record.text;
+            modified = true;
+        }
+        if (existing.edited !== !!record.edited) {
+            existing.edited = !!record.edited;
+            modified = true;
+        }
+        if (record.scope && existing.scope !== record.scope) {
+            existing.scope = record.scope;
+            modified = true;
+        }
+        if (record.recipient && existing.recipient !== record.recipient) {
+            existing.recipient = record.recipient;
+            modified = true;
+        }
+        if (modified) {
+            await dbSaveMessage(existing);
+            return true;
+        }
+    }
+    return false;
+}
+
+// =========================================================================
+// 6. Chat Messages Rendering (With Unique File IDs & Privacy Scopes)
+// =========================================================================
 async function renderAllMessages() {
     const messages = await dbGetAllMessages();
     messages.forEach(m => knownMessageIds.add(m.id));
@@ -525,52 +592,77 @@ async function renderAllMessages() {
         const emptyDiv = document.createElement('div');
         emptyDiv.className = 'empty-chat-hint';
         emptyDiv.style.cssText = 'color:#64748b; font-size:0.82rem; text-align:center; padding:30px 10px; font-style:italic;';
-        emptyDiv.textContent = 'Niciun mesaj încă. Fii primul care începe o conversație privată!';
+        emptyDiv.textContent = 'Niciun mesaj inca. Fii primul care incepe o conversatie!';
         list.appendChild(emptyDiv);
         return;
     }
 
-    messages.forEach(msg => {
-        const isOwn = currentUser && msg.sender === currentUser.email;
-        const msgDiv = document.createElement('div');
-        msgDiv.className = `chat-msg-item ${isOwn ? 'own' : 'other'}`;
-        msgDiv.id = `msg-el-${msg.id}`;
+    const myEmail = currentUser ? (currentUser.email || currentUser.username) : '';
 
-        let mediaHtml = '';
-        if (msg.file && msg.file.dataUrl) {
-            const mime = msg.file.type || '';
-            if (mime.startsWith('image/')) {
-                mediaHtml = `<img src="${msg.file.dataUrl}" alt="${escapeHtml(msg.file.name)}" class="chat-media-preview-img" onclick="openMediaPreview('${msg.file.dataUrl}')">`;
-            } else if (mime.startsWith('video/')) {
-                mediaHtml = `<video src="${msg.file.dataUrl}" controls class="chat-media-video"></video>`;
-            } else if (mime.startsWith('audio/')) {
-                mediaHtml = `<audio src="${msg.file.dataUrl}" controls style="margin-top:6px; max-width:100%;"></audio>`;
-            } else {
-                mediaHtml = `
-                    <a href="${msg.file.dataUrl}" download="${escapeHtml(msg.file.name)}" class="chat-media-doc">
-                        <span style="font-size:1.4rem;">📄</span>
-                        <div class="chat-doc-info">
-                            <span class="chat-doc-name">${escapeHtml(msg.file.name)}</span>
-                            <span class="chat-doc-size">${msg.file.size || ''} • Click pentru descărcare</span>
-                        </div>
-                    </a>
-                `;
+    messages.forEach(msg => {
+        const isOwn = !!myEmail && (msg.sender === myEmail);
+        const isPrivate = (msg.scope === 'private') || (msg.file && msg.file.scope === 'private') || (msg.recipient && msg.recipient.trim() !== '');
+
+        // Filtrare Confidentialitate: daca mesajul e privat, il vad doar expeditorul si destinatarul
+        if (isPrivate) {
+            const isRecipient = !!myEmail && (msg.recipient === myEmail);
+            if (!isOwn && !isRecipient) {
+                return; // Nu se afiseaza utilizatorilor neautorizati
             }
         }
 
-        const textHtml = msg.text ? `<div class="chat-text">${escapeHtml(msg.text).replace(/\n/g, '<br>')}</div>` : '';
-        const editedTag = msg.edited ? `<span class="edited-badge">(editat)</span>` : '';
+        const msgDiv = document.createElement('div');
+        msgDiv.className = 'chat-msg-item ' + (isOwn ? 'own' : 'other');
+        msgDiv.id = 'msg-el-' + msg.id;
 
-        msgDiv.innerHTML = `
-            <div class="chat-msg-header">
-                <span class="chat-msg-author">${isOwn ? 'Tu' : escapeHtml(msg.sender)}</span>
-                <span class="chat-msg-time">${msg.timeStr || ''}${editedTag}</span>
-            </div>
-            <div class="chat-msg-bubble" title="Apasă lung sau click pentru opțiuni (editare/ștergere)">
-                ${textHtml}
-                ${mediaHtml}
-            </div>
-        `;
+        // Badge-uri de destinatie (Public / Privat)
+        let scopeBadgeHtml = '';
+        if (isPrivate) {
+            const targetLabel = isOwn ? ('catre ' + (msg.recipient || 'Utilizator')) : 'de la ' + msg.sender;
+            scopeBadgeHtml = '<span class="msg-scope-badge private">🔒 Privat (' + escapeHtml(targetLabel) + ')</span>';
+        } else {
+            scopeBadgeHtml = '<span class="msg-scope-badge public">🌐 Public</span>';
+        }
+
+        // Continut Media si Identificator Unic
+        let mediaHtml = '';
+        if (msg.file && msg.file.dataUrl) {
+            const mime = msg.file.type || '';
+            const fileId = msg.file.fileId || ('G86-F-' + (msg.pbId || msg.id).substring(0, 8).toUpperCase());
+
+            const fileIdBadge = '<div class="chat-file-id-tag">' +
+                '<span>🆔 ' + escapeHtml(fileId) + '</span>' +
+                '<button type="button" class="chat-file-id-copy" onclick="copyFileId(\'' + escapeHtml(fileId) + '\')" title="Copiaza ID unic">📋 Copiaza</button>' +
+            '</div>';
+
+            if (mime.startsWith('image/')) {
+                mediaHtml = '<img src="' + msg.file.dataUrl + '" alt="' + escapeHtml(msg.file.name) + '" class="chat-media-preview-img" onclick="openMediaPreview(\'' + msg.file.dataUrl + '\')">' + fileIdBadge;
+            } else if (mime.startsWith('video/')) {
+                mediaHtml = '<video src="' + msg.file.dataUrl + '" controls class="chat-media-video"></video>' + fileIdBadge;
+            } else if (mime.startsWith('audio/')) {
+                mediaHtml = '<audio src="' + msg.file.dataUrl + '" controls style="margin-top:6px; max-width:100%;"></audio>' + fileIdBadge;
+            } else {
+                mediaHtml = '<a href="' + msg.file.dataUrl + '" download="' + escapeHtml(msg.file.name) + '" class="chat-media-doc">' +
+                    '<span style="font-size:1.4rem;">📄</span>' +
+                    '<div class="chat-doc-info">' +
+                        '<span class="chat-doc-name">' + escapeHtml(msg.file.name) + '</span>' +
+                        '<span class="chat-doc-size">' + (msg.file.size || '') + ' • Click pentru descarcare</span>' +
+                    '</div></a>' + fileIdBadge;
+            }
+        }
+
+        const textHtml = msg.text ? '<div class="chat-text">' + escapeHtml(msg.text).replace(/\n/g, '<br>') + '</div>' : '';
+        const editedTag = msg.edited ? '<span class="edited-badge">(editat)</span>' : '';
+
+        msgDiv.innerHTML = '<div class="chat-msg-header">' +
+                '<span class="chat-msg-author">' + (isOwn ? 'Tu' : escapeHtml(msg.sender)) + '</span>' +
+                scopeBadgeHtml +
+                '<span class="chat-msg-time">' + (msg.timeStr || '') + editedTag + '</span>' +
+            '</div>' +
+            '<div class="chat-msg-bubble" title="Apasa lung sau click pentru optiuni (editare/stergere)">' +
+                textHtml +
+                mediaHtml +
+            '</div>';
 
         const bubble = msgDiv.querySelector('.chat-msg-bubble');
         if (bubble) {
@@ -583,13 +675,23 @@ async function renderAllMessages() {
     container.scrollTop = container.scrollHeight;
 }
 
+// =========================================================================
 // 7. Send, Edit & Delete Message Logic
+// =========================================================================
 async function handleSendMessage(e) {
     if (e) e.preventDefault();
     const textarea = document.getElementById('inputChatMessage');
     const text = textarea ? textarea.value.trim() : '';
+    const inputRec = document.getElementById('inputRecipient');
+    const recipient = inputRec ? inputRec.value.trim() : '';
 
     if (!text && !currentSelectedFile) return;
+
+    if (currentChatScope === 'private' && !recipient) {
+        alert('Te rugam sa introduci adresa de email a destinatarului pentru mesajul privat.');
+        if (inputRec) inputRec.focus();
+        return;
+    }
 
     if (currentEditingMsgId) {
         await saveEditedMessage(currentEditingMsgId, text);
@@ -597,42 +699,83 @@ async function handleSendMessage(e) {
     }
 
     const msgId = 'msg_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7);
-    const newMsg = {
-        id: msgId,
-        sender: currentUser ? currentUser.email : 'Anonim',
-        text: text,
-        file: currentSelectedFile ? {
+    const sender = currentUser ? (currentUser.email || currentUser.username) : 'Anonim';
+    const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const timestamp = Date.now();
+
+    // Daca exista fisier atasat, asigura-i un identificator unic si scopul selectat
+    let filePayload = null;
+    if (currentSelectedFile) {
+        const fileUniqueId = 'G86-F-' + Math.random().toString(36).substring(2, 6).toUpperCase() + '-' + Date.now().toString(36).toUpperCase();
+        filePayload = {
+            fileId: fileUniqueId,
             name: currentSelectedFile.name,
             type: currentSelectedFile.type,
             size: currentSelectedFile.size,
-            dataUrl: currentSelectedFile.dataUrl
-        } : null,
-        timestamp: Date.now(),
-        timeStr: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+            dataUrl: currentSelectedFile.dataUrl,
+            scope: currentChatScope,
+            targetUser: (currentChatScope === 'private') ? recipient : null
+        };
+    }
+
+    const newMsg = {
+        id: msgId,
+        pbId: null,
+        sender: sender,
+        text: text,
+        file: filePayload,
+        timestamp: timestamp,
+        timeStr: timeStr,
+        scope: currentChatScope,
+        recipient: (currentChatScope === 'private') ? recipient : '',
         edited: false,
+        deleted: false,
         deletedForMe: false
     };
 
-    // 1. Salvare în memoria locală (IndexedDB) pe dispozitiv (nu se pierde niciodată)
+    // 1. Salvare locala imediata in IndexedDB (offline-first UI)
     await dbSaveMessage(newMsg);
     knownMessageIds.add(msgId);
 
-    // 2. Reset căsuță și fișier
+    // 2. Reset input si preview
     if (textarea) {
         textarea.value = '';
         autoResizeTextarea();
     }
     clearSelectedFile();
 
-    // 3. Randare instantanee local
+    // 3. Randare instanta
     await renderAllMessages();
 
-    // 4. Propagare P2P direct către ceilalți participanți conectați
-    const encryptedBundle = await encryptPayload(newMsg);
-    broadcastP2P({
-        type: 'NEW_MESSAGE',
-        bundle: encryptedBundle
-    });
+    // 4. Trimitere la server PocketBase
+    try {
+        const res = await fetch('/api/collections/messages/records', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                msgId: newMsg.id,
+                sender: newMsg.sender,
+                text: newMsg.text,
+                file: newMsg.file,
+                timeStr: newMsg.timeStr,
+                timestamp: newMsg.timestamp,
+                scope: newMsg.scope,
+                recipient: newMsg.recipient,
+                edited: false,
+                deleted: false
+            })
+        });
+
+        if (res.ok) {
+            const serverRecord = await res.json();
+            if (serverRecord && serverRecord.id) {
+                newMsg.pbId = serverRecord.id;
+                await dbSaveMessage(newMsg);
+            }
+        }
+    } catch (err) {
+        console.warn('[Chat] Eroare la trimiterea mesajului catre PocketBase:', err);
+    }
 }
 
 async function saveEditedMessage(msgId, newText) {
@@ -646,12 +789,33 @@ async function saveEditedMessage(msgId, newText) {
     cancelEditingMessage();
     await renderAllMessages();
 
-    // Propagare modificare către ceilalți participanți
-    broadcastP2P({
-        type: 'EDIT_MESSAGE',
-        msgId: msgId,
-        newText: newText
-    });
+    try {
+        let pbRecordId = msg.pbId;
+        if (!pbRecordId) {
+            const queryRes = await fetch('/api/collections/messages/records?filter=' + encodeURIComponent("msgId='" + msgId + "'"));
+            if (queryRes.ok) {
+                const queryData = await queryRes.json();
+                if (queryData.items && queryData.items.length > 0) {
+                    pbRecordId = queryData.items[0].id;
+                    msg.pbId = pbRecordId;
+                    await dbSaveMessage(msg);
+                }
+            }
+        }
+
+        if (pbRecordId) {
+            await fetch('/api/collections/messages/records/' + pbRecordId, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    text: newText,
+                    edited: true
+                })
+            });
+        }
+    } catch (err) {
+        console.warn('[Chat] Eroare sincronizare editare:', err);
+    }
 }
 
 function startEditingMessage(msgId) {
@@ -681,15 +845,34 @@ function cancelEditingMessage() {
 }
 
 async function deleteMessageForAll(msgId) {
+    const msg = await dbGetMessage(msgId);
+    let pbRecordId = msg ? msg.pbId : null;
+
+    // 1. Stergere PRIORITARA de pe server PocketBase
+    try {
+        if (!pbRecordId) {
+            const queryRes = await fetch('/api/collections/messages/records?filter=' + encodeURIComponent("msgId='" + msgId + "'"));
+            if (queryRes.ok) {
+                const queryData = await queryRes.json();
+                if (queryData.items && queryData.items.length > 0) {
+                    pbRecordId = queryData.items[0].id;
+                }
+            }
+        }
+
+        if (pbRecordId) {
+            await fetch('/api/collections/messages/records/' + pbRecordId, {
+                method: 'DELETE'
+            });
+        }
+    } catch (err) {
+        console.warn('[Chat] Eroare stergere de pe server:', err);
+    }
+
+    // 2. Stergere din memoria locala (IndexedDB)
     await dbDeleteMessageAll(msgId);
     knownMessageIds.delete(msgId);
     await renderAllMessages();
-
-    // Propagare ștergere P2P
-    broadcastP2P({
-        type: 'DELETE_MESSAGE_ALL',
-        msgId: msgId
-    });
 }
 
 async function deleteMessageForMe(msgId) {
@@ -697,7 +880,9 @@ async function deleteMessageForMe(msgId) {
     await renderAllMessages();
 }
 
+// =========================================================================
 // 8. Auto-Expanding Textarea & Enter to Send
+// =========================================================================
 function setupTextareaHandlers() {
     const textarea = document.getElementById('inputChatMessage');
     if (!textarea) return;
@@ -718,7 +903,9 @@ function autoResizeTextarea() {
     textarea.style.height = Math.min(textarea.scrollHeight, 240) + 'px';
 }
 
+// =========================================================================
 // 9. Dropdown Toggle for Public Chat
+// =========================================================================
 function toggleChatDropdown() {
     const body = document.getElementById('chatDropdownBody');
     const arrow = document.getElementById('chatDropdownArrow');
@@ -736,7 +923,9 @@ function toggleChatDropdown() {
     }
 }
 
-// 10. File & Media Attachment
+// =========================================================================
+// 10. File & Media Attachment (Smart Compression for Photos & Unique ID)
+// =========================================================================
 function triggerFileInput() {
     const input = document.getElementById('chatFileInput');
     if (input) input.click();
@@ -746,21 +935,66 @@ function handleFileSelected(e) {
     const file = e.target.files[0];
     if (!file) return;
 
-    if (file.size > 50 * 1024 * 1024) {
-        alert("Fișierul depășește limita de 50MB pentru transfer direct P2P.");
+    if (file.size > 25 * 1024 * 1024) {
+        alert('Fisierul depaseste limita de 25MB.');
         e.target.value = '';
         return;
     }
 
-    const reader = new FileReader();
-    reader.onload = function(evt) {
-        currentSelectedFile = {
-            name: file.name,
-            type: file.type,
-            size: formatFileSize(file.size),
-            dataUrl: evt.target.result
+    if (file.type.startsWith('image/')) {
+        compressImageFile(file, (compressedDataUrl) => {
+            currentSelectedFile = {
+                name: file.name,
+                type: file.type,
+                size: formatFileSize(compressedDataUrl.length * 0.75),
+                dataUrl: compressedDataUrl
+            };
+            showFilePreview(currentSelectedFile);
+        });
+    } else {
+        const reader = new FileReader();
+        reader.onload = function(evt) {
+            currentSelectedFile = {
+                name: file.name,
+                type: file.type,
+                size: formatFileSize(file.size),
+                dataUrl: evt.target.result
+            };
+            showFilePreview(currentSelectedFile);
         };
-        showFilePreview(currentSelectedFile);
+        reader.readAsDataURL(file);
+    }
+}
+
+function compressImageFile(file, callback) {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+        const img = new Image();
+        img.onload = () => {
+            const canvas = document.createElement('canvas');
+            let width = img.width;
+            let height = img.height;
+            const maxDim = 1280;
+
+            if (width > maxDim || height > maxDim) {
+                if (width > height) {
+                    height = Math.round((height * maxDim) / width);
+                    width = maxDim;
+                } else {
+                    width = Math.round((width * maxDim) / height);
+                    height = maxDim;
+                }
+            }
+
+            canvas.width = width;
+            canvas.height = height;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(img, 0, 0, width, height);
+
+            const compressedDataUrl = canvas.toDataURL('image/jpeg', 0.82);
+            callback(compressedDataUrl);
+        };
+        img.src = e.target.result;
     };
     reader.readAsDataURL(file);
 }
@@ -773,12 +1007,12 @@ function showFilePreview(file) {
     if (!bar) return;
 
     nameEl.textContent = file.name;
-    sizeEl.textContent = `(${file.size})`;
+    sizeEl.textContent = '(' + file.size + ')';
 
     if (file.type.startsWith('image/')) iconEl.textContent = '🖼️';
     else if (file.type.startsWith('video/')) iconEl.textContent = '🎬';
     else if (file.type.startsWith('audio/')) iconEl.textContent = '🎵';
-    else iconEl.innerHTML = `<svg viewBox="0 0 24 24" class="paperclip-svg-icon-sm" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>`;
+    else iconEl.innerHTML = '<svg viewBox="0 0 24 24" class="paperclip-svg-icon-sm" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>';
 
     bar.classList.remove('hidden');
 }
@@ -791,8 +1025,17 @@ function clearSelectedFile() {
     if (bar) bar.classList.add('hidden');
 }
 
+function copyFileId(fileId) {
+    if (navigator.clipboard) {
+        navigator.clipboard.writeText(fileId);
+        alert('Identificator fisier copiat in clipboard: ' + fileId);
+    } else {
+        prompt('Copiaza ID-ul:', fileId);
+    }
+}
+
 function formatFileSize(bytes) {
-    if (bytes < 1024) return bytes + ' B';
+    if (bytes < 1024) return Math.round(bytes) + ' B';
     else if (bytes < 1048576) return (bytes / 1024).toFixed(1) + ' KB';
     else return (bytes / 1048576).toFixed(1) + ' MB';
 }
@@ -800,11 +1043,13 @@ function formatFileSize(bytes) {
 function openMediaPreview(dataUrl) {
     const win = window.open();
     if (win) {
-        win.document.write(`<body style="margin:0; background:#0a0e17; display:flex; justify-content:center; align-items:center; min-height:100vh;"><img src="${dataUrl}" style="max-width:95vw; max-height:95vh; object-fit:contain; border-radius:8px;"></body>`);
+        win.document.write('<body style="margin:0; background:#0a0e17; display:flex; justify-content:center; align-items:center; min-height:100vh;"><img src="' + dataUrl + '" style="max-width:95vw; max-height:95vh; object-fit:contain; border-radius:8px;"></body>');
     }
 }
 
+// =========================================================================
 // 11. Modal Sheet for Message Options (Long Press / Click)
+// =========================================================================
 function setupMessageActionTriggers(element, msgId, isOwn) {
     let pressTimer = null;
 
@@ -828,7 +1073,7 @@ function setupMessageActionTriggers(element, msgId, isOwn) {
     });
 
     element.addEventListener('click', (e) => {
-        if (e.target.tagName === 'A' || e.target.tagName === 'VIDEO' || e.target.tagName === 'AUDIO') return;
+        if (e.target.tagName === 'A' || e.target.tagName === 'VIDEO' || e.target.tagName === 'AUDIO' || e.target.tagName === 'BUTTON') return;
         openMessageModal(msgId, isOwn);
     });
 }
@@ -841,23 +1086,19 @@ function openMessageModal(msgId, isOwn) {
     if (!modal || !container) return;
 
     container.innerHTML = '';
-    title.textContent = isOwn ? 'Opțiuni Mesaj Propriu' : 'Opțiuni Mesaj Primit';
+    title.textContent = isOwn ? 'Optiuni Mesaj Propriu' : 'Optiuni Mesaj Primit';
 
     if (isOwn) {
-        container.innerHTML = `
-            <button type="button" class="modal-action-btn" onclick="triggerEditAction('${msgId}')">
-                <span>✏️</span> Editează Mesajul
-            </button>
-            <button type="button" class="modal-action-btn danger" onclick="triggerDeleteAllAction('${msgId}')">
-                <span>🗑️</span> Șterge pentru Toți
-            </button>
-        `;
+        container.innerHTML = '<button type="button" class="modal-action-btn" onclick="triggerEditAction(\'' + msgId + '\')">' +
+                '<span>✏️</span> Editeaza Mesajul' +
+            '</button>' +
+            '<button type="button" class="modal-action-btn danger" onclick="triggerDeleteAllAction(\'' + msgId + '\')">' +
+                '<span>🗑️</span> Sterge pentru Toti' +
+            '</button>';
     } else {
-        container.innerHTML = `
-            <button type="button" class="modal-action-btn danger" onclick="triggerDeleteForMeAction('${msgId}')">
-                <span>🗑️</span> Șterge pentru Mine (Dispare de pe acest dispozitiv)
-            </button>
-        `;
+        container.innerHTML = '<button type="button" class="modal-action-btn danger" onclick="triggerDeleteForMeAction(\'' + msgId + '\')">' +
+                '<span>🗑️</span> Sterge pentru Mine (Dispare de pe acest dispozitiv)' +
+            '</button>';
     }
 
     modal.classList.remove('hidden');
@@ -876,7 +1117,7 @@ function triggerEditAction(msgId) {
 
 async function triggerDeleteAllAction(msgId) {
     closeMessageModal();
-    if (confirm("Sigur dorești să ștergi acest mesaj pentru toți participanții?")) {
+    if (confirm('Sigur doresti sa stergi acest mesaj pentru toti participantii?')) {
         await deleteMessageForAll(msgId);
     }
 }

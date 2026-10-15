@@ -204,7 +204,7 @@ public class ProcessHelper {
                 sdfAlt.setTimeZone(java.util.TimeZone.getTimeZone("UTC"));
 
                 try (Cursor cursor = auxDb.rawQuery(
-                        "SELECT data, created FROM _logs ORDER BY rowid DESC LIMIT 100", null
+                        "SELECT data, created FROM _logs ORDER BY rowid DESC LIMIT 300", null
                 )) {
                     while (cursor.moveToNext()) {
                         String json = cursor.getString(0);
@@ -220,8 +220,8 @@ public class ProcessHelper {
                             } catch (Exception ignored) {}
                         }
 
-                        // Consider client active if activity is within last 90 seconds
-                        if (createdMs > 0 && (nowMs - createdMs) > 90000) {
+                        // Consider client active if activity is within last 120 seconds
+                        if (createdMs > 0 && (nowMs - createdMs) > 120000) {
                             continue;
                         }
 
@@ -229,26 +229,42 @@ public class ProcessHelper {
                         if (ip == null || ip.isEmpty()) {
                             ip = extractJsonField(json, "remoteIP");
                         }
-                        if (ip == null || ip.isEmpty() || "127.0.0.1".equals(ip) || "::1".equals(ip)) {
-                            continue;
+
+                        String url = extractJsonField(json, "url");
+                        String emailFromUrl = extractEmailFromUrl(url);
+
+                        boolean isCloudflare = false;
+                        String referer = extractJsonField(json, "referer");
+                        if (referer != null && referer.contains("trycloudflare.com")) {
+                            isCloudflare = true;
                         }
 
-                        ActiveClient client = clientMap.get(ip);
+                        if ("127.0.0.1".equals(ip) || "::1".equals(ip) || ip == null || ip.isEmpty()) {
+                            if (isCloudflare) {
+                                ip = "Cloudflare Tunnel (HTTPS)";
+                            } else {
+                                continue;
+                            }
+                        }
+
+                        // Key by email or IP so multiple users never overwrite each other
+                        String clientKey = (emailFromUrl != null && !emailFromUrl.isEmpty()) ? emailFromUrl : ip;
+                        ActiveClient client = clientMap.get(clientKey);
                         if (client == null) {
                             client = new ActiveClient();
                             client.ip = ip;
-                            if (ip.startsWith("192.168.") || ip.startsWith("10.") || ip.startsWith("172.")) {
+                            if (isCloudflare) {
+                                client.type = "Tunel Cloudflare (Extern)";
+                            } else if (ip.startsWith("192.168.") || ip.startsWith("10.") || ip.startsWith("172.")) {
                                 client.type = "Rețea Locală (Wi-Fi)";
                             } else {
                                 client.type = "Conexiune Externă";
                             }
-                            clientMap.put(ip, client);
+                            clientMap.put(clientKey, client);
                         }
 
                         // Check URL for email parameter or auth collection
                         if (client.email == null || client.email.isEmpty()) {
-                            String url = extractJsonField(json, "url");
-                            String emailFromUrl = extractEmailFromUrl(url);
                             if (emailFromUrl != null && !emailFromUrl.isEmpty()) {
                                 client.email = emailFromUrl;
                             } else {

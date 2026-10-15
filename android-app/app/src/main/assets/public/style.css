@@ -875,3 +875,112 @@ input:focus {
 }
 
 .net-tag.pwa { border-color: rgba(16, 185, 129, 0.6); color: #6ee7b7; font-weight: 600; }
+
+/* Destination Scope Bar (Public / Private) */
+.chat-scope-bar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 10px;
+    background: rgba(15, 23, 42, 0.6);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 8px;
+    font-size: 0.78rem;
+    color: var(--text-secondary);
+    margin-bottom: 8px;
+}
+
+.scope-btn-group {
+    display: flex;
+    gap: 4px;
+}
+
+.btn-scope-pill {
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    color: var(--text-secondary);
+    padding: 3px 8px;
+    border-radius: 6px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.btn-scope-pill.active {
+    background: rgba(16, 185, 129, 0.2);
+    border-color: var(--accent-emerald);
+    color: var(--accent-emerald);
+}
+
+.btn-scope-pill.private-active {
+    background: rgba(168, 85, 247, 0.2);
+    border-color: #c084fc;
+    color: #c084fc;
+}
+
+.chat-recipient-input {
+    flex: 1;
+    background: rgba(0, 0, 0, 0.35);
+    border: 1px solid rgba(168, 85, 247, 0.3);
+    border-radius: 6px;
+    padding: 4px 8px;
+    color: #fff;
+    font-size: 0.75rem;
+    font-family: inherit;
+    outline: none;
+}
+
+.chat-recipient-input:focus {
+    border-color: #c084fc;
+    box-shadow: 0 0 8px rgba(192, 132, 252, 0.25);
+}
+
+/* File Unique ID & Scope Badges */
+.chat-file-id-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: rgba(6, 182, 212, 0.12);
+    border: 1px solid rgba(6, 182, 212, 0.3);
+    border-radius: 6px;
+    padding: 3px 8px;
+    font-size: 0.70rem;
+    font-family: 'JetBrains Mono', monospace;
+    color: var(--accent-cyan);
+    margin-top: 6px;
+}
+
+.chat-file-id-copy {
+    cursor: pointer;
+    background: transparent;
+    border: none;
+    color: inherit;
+    padding: 0;
+    font-size: 0.72rem;
+    opacity: 0.8;
+}
+
+.chat-file-id-copy:hover {
+    opacity: 1;
+}
+
+.msg-scope-badge {
+    font-size: 0.68rem;
+    padding: 1px 6px;
+    border-radius: 4px;
+    font-weight: 600;
+    margin-left: 6px;
+}
+
+.msg-scope-badge.public {
+    background: rgba(16, 185, 129, 0.15);
+    color: var(--accent-emerald);
+    border: 1px solid rgba(16, 185, 129, 0.3);
+}
+
+.msg-scope-badge.private {
+    background: rgba(168, 85, 247, 0.15);
+    color: #c084fc;
+    border: 1px solid rgba(168, 85, 247, 0.3);
+}

@@ -137,6 +137,16 @@
                             <button type="button" class="btn-cancel-file" onclick="clearSelectedFile()" title="Șterge atașamentul">✕</button>
                         </div>
 
+                        <!-- Scope Selector Bar (Public vs Private) -->
+                        <div class="chat-scope-bar">
+                            <span>Destinație:</span>
+                            <div class="scope-btn-group">
+                                <button type="button" id="btnScopePublic" class="btn-scope-pill active" onclick="setChatScope('public')">🌐 Public</button>
+                                <button type="button" id="btnScopePrivate" class="btn-scope-pill" onclick="setChatScope('private')">🔒 Privat</button>
+                            </div>
+                            <input type="text" id="inputRecipient" class="chat-recipient-input hidden" placeholder="Email / Utilizator destinatar..." autocomplete="off">
+                        </div>
+
                         <!-- Chat Input Form -->
                         <form id="formChat" class="chat-input-box" onsubmit="handleSendMessage(event)">
                             <input type="file" id="chatFileInput" class="hidden-file-input" onchange="handleFileSelected(event)" accept="image/*,video/*,audio/*,application/pdf,text/*,.doc,.docx,.zip">
@@ -174,6 +184,6 @@
         </footer>
     </div>
 
-    <script src="app.js"></script>
+    <script src="app.js?v=5"></script>
 </body>
 </html>
