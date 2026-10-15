@@ -149,6 +149,23 @@ function loginSuccess(record, token) {
     document.getElementById('userAvatar').innerText = email.charAt(0).toUpperCase();
 
     addLog(`[Auth] Autentificare reusita pentru: ${email}`, 'success');
+    startHeartbeat();
+}
+
+let heartbeatTimer = null;
+function startHeartbeat() {
+    if (heartbeatTimer) clearInterval(heartbeatTimer);
+    const pulse = () => {
+        if (authToken) {
+            const emailParam = currentUser && currentUser.email ? ('?email=' + encodeURIComponent(currentUser.email)) : '';
+            fetch('/api/collections/users/auth-refresh' + emailParam, {
+                method: 'POST',
+                headers: { 'Authorization': authToken }
+            }).catch(() => {});
+        }
+    };
+    pulse();
+    heartbeatTimer = setInterval(pulse, 10000);
 }
 
 function checkExistingAuth() {
@@ -163,6 +180,10 @@ function checkExistingAuth() {
 }
 
 function handleLogout() {
+    if (heartbeatTimer) {
+        clearInterval(heartbeatTimer);
+        heartbeatTimer = null;
+    }
     if (isWorkerRunning) stopWorker();
     currentUser = null;
     authToken = null;

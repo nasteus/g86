@@ -12,7 +12,9 @@ import android.graphics.Bitmap;
 import android.os.BatteryManager;
 import android.os.Build;
 import android.os.Bundle;
+import android.view.View;
 import android.widget.ImageView;
+import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.Toast;
@@ -20,12 +22,16 @@ import android.widget.Toast;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
+import androidx.core.graphics.Insets;
+import androidx.core.view.ViewCompat;
+import androidx.core.view.WindowInsetsCompat;
 
 import com.google.android.material.button.MaterialButton;
 
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileReader;
+import java.util.List;
 
 public class MainActivity extends AppCompatActivity {
 
@@ -43,6 +49,17 @@ public class MainActivity extends AppCompatActivity {
     private TextView tvBattery;
     private TextView tvLogs;
     private ScrollView scrollLogs;
+    private LinearLayout layoutAddressesHeader;
+    private LinearLayout layoutAddressesContent;
+    private TextView tvAddressesArrow;
+
+    private LinearLayout layoutConnectionsHeader;
+    private LinearLayout layoutConnectionsContent;
+    private TextView tvConnectionsTitle;
+    private TextView tvConnectionsArrow;
+    private LinearLayout layoutConnectionsList;
+    private TextView tvEmptyConnections;
+    private boolean isMonitoringConnections = false;
 
     private final StringBuilder logBuilder = new StringBuilder();
 
@@ -70,6 +87,14 @@ public class MainActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
+        ViewCompat.setOnApplyWindowInsetsListener(findViewById(R.id.coordinatorLayout), (v, windowInsets) -> {
+            Insets insets = windowInsets.getInsets(
+                    WindowInsetsCompat.Type.systemBars() | WindowInsetsCompat.Type.displayCutout()
+            );
+            v.setPadding(insets.left, insets.top, insets.right, insets.bottom);
+            return windowInsets;
+        });
+
         initViews();
         checkPermissions();
         updateBatteryAndRam();
@@ -89,12 +114,22 @@ public class MainActivity extends AppCompatActivity {
     protected void onResume() {
         super.onResume();
         refreshCurrentState();
+        startConnectionsMonitoring();
+    }
+
+    @Override
+    protected void onPause() {
+        super.onPause();
+        stopConnectionsMonitoring();
     }
 
     private void refreshCurrentState() {
         // Read onion address from file if available
         if (ServerService.onionAddress.isEmpty()) {
-            File hsFile = new File(getFilesDir(), "tor_data/hs/hostname");
+            File hsFile = new File(ProcessHelper.getG86StorageDir(this), "tor_data/hs/hostname");
+            if (!hsFile.exists()) {
+                hsFile = new File(getFilesDir(), "tor_data/hs/hostname");
+            }
             if (hsFile.exists()) {
                 try (BufferedReader reader = new BufferedReader(new FileReader(hsFile))) {
                     String line = reader.readLine();
@@ -127,6 +162,37 @@ public class MainActivity extends AppCompatActivity {
         tvBattery = findViewById(R.id.tvBattery);
         tvLogs = findViewById(R.id.tvLogs);
         scrollLogs = findViewById(R.id.scrollLogs);
+        layoutAddressesHeader = findViewById(R.id.layoutAddressesHeader);
+        layoutAddressesContent = findViewById(R.id.layoutAddressesContent);
+        tvAddressesArrow = findViewById(R.id.tvAddressesArrow);
+
+        layoutAddressesHeader.setOnClickListener(v -> {
+            if (layoutAddressesContent.getVisibility() == View.VISIBLE) {
+                layoutAddressesContent.setVisibility(View.GONE);
+                tvAddressesArrow.setText("▼");
+            } else {
+                layoutAddressesContent.setVisibility(View.VISIBLE);
+                tvAddressesArrow.setText("▲");
+            }
+        });
+
+        layoutConnectionsHeader = findViewById(R.id.layoutConnectionsHeader);
+        layoutConnectionsContent = findViewById(R.id.layoutConnectionsContent);
+        tvConnectionsTitle = findViewById(R.id.tvConnectionsTitle);
+        tvConnectionsArrow = findViewById(R.id.tvConnectionsArrow);
+        layoutConnectionsList = findViewById(R.id.layoutConnectionsList);
+        tvEmptyConnections = findViewById(R.id.tvEmptyConnections);
+
+        layoutConnectionsHeader.setOnClickListener(v -> {
+            if (layoutConnectionsContent.getVisibility() == View.VISIBLE) {
+                layoutConnectionsContent.setVisibility(View.GONE);
+                tvConnectionsArrow.setText("▼");
+            } else {
+                layoutConnectionsContent.setVisibility(View.VISIBLE);
+                tvConnectionsArrow.setText("▲");
+                refreshActiveConnections();
+            }
+        });
 
         btnToggleServer.setOnClickListener(v -> {
             if (ServerService.isRunning) {
@@ -188,12 +254,12 @@ public class MainActivity extends AppCompatActivity {
 
     private void updateUI(boolean isRunning, String onion, String local, String cloudflare) {
         if (isRunning) {
-            tvStatus.setText("Status: ACTIV (Permanent / 24/7)");
+            tvStatus.setText("Online");
             tvStatus.setTextColor(ContextCompat.getColor(this, R.color.accent_emerald));
             btnToggleServer.setText("Oprește");
             btnToggleServer.setBackgroundColor(ContextCompat.getColor(this, android.R.color.holo_red_dark));
         } else {
-            tvStatus.setText("Status: OPRIT");
+            tvStatus.setText("Offline");
             tvStatus.setTextColor(ContextCompat.getColor(this, R.color.text_secondary));
             btnToggleServer.setText("Pornește");
             btnToggleServer.setBackgroundColor(ContextCompat.getColor(this, R.color.accent_emerald));
@@ -267,6 +333,91 @@ public class MainActivity extends AppCompatActivity {
                 ActivityCompat.requestPermissions(this,
                         new String[]{Manifest.permission.POST_NOTIFICATIONS}, 101);
             }
+        }
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            if (!android.os.Environment.isExternalStorageManager()) {
+                try {
+                    Intent intent = new Intent(android.provider.Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION);
+                    intent.setData(android.net.Uri.parse("package:" + getPackageName()));
+                    startActivity(intent);
+                } catch (Exception e) {
+                    try {
+                        Intent intent = new Intent(android.provider.Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION);
+                        startActivity(intent);
+                    } catch (Exception ignored) {}
+                }
+            }
+        }
+    }
+
+    private void startConnectionsMonitoring() {
+        if (isMonitoringConnections) return;
+        isMonitoringConnections = true;
+        new Thread(() -> {
+            while (isMonitoringConnections) {
+                refreshActiveConnections();
+                try {
+                    Thread.sleep(3000);
+                } catch (InterruptedException ignored) {}
+            }
+        }).start();
+    }
+
+    private void stopConnectionsMonitoring() {
+        isMonitoringConnections = false;
+    }
+
+    private void refreshActiveConnections() {
+        List<ProcessHelper.ActiveClient> clients = ProcessHelper.getActiveClients(this);
+        runOnUiThread(() -> updateConnectionsUI(clients));
+    }
+
+    private void updateConnectionsUI(List<ProcessHelper.ActiveClient> clients) {
+        if (tvConnectionsTitle == null || layoutConnectionsList == null) return;
+        tvConnectionsTitle.setText("Conexiuni active (" + clients.size() + ")");
+        if (clients.isEmpty()) {
+            tvEmptyConnections.setVisibility(View.VISIBLE);
+            layoutConnectionsList.removeAllViews();
+            return;
+        }
+
+        tvEmptyConnections.setVisibility(View.GONE);
+        layoutConnectionsList.removeAllViews();
+
+        for (int i = 0; i < clients.size(); i++) {
+            ProcessHelper.ActiveClient client = clients.get(i);
+            LinearLayout item = new LinearLayout(this);
+            item.setOrientation(LinearLayout.VERTICAL);
+            item.setPadding(0, 10, 0, 10);
+
+            TextView tvMain = new TextView(this);
+            boolean isAuth = (client.email != null && !client.email.isEmpty());
+            String displayUser = isAuth ? client.email : "Vizitator (Nelogat)";
+            tvMain.setText(displayUser + "  •  " + client.type + "  •  " + client.ip);
+            tvMain.setTextColor(isAuth ? 0xFF10B981 : 0xFFA0AEC0);
+            tvMain.setTextSize(13);
+            tvMain.setTypeface(null, android.graphics.Typeface.BOLD);
+            item.addView(tvMain);
+
+            TextView tvSub = new TextView(this);
+            tvSub.setText(isAuth ? "Stare: Autentificat & Activ" : "Stare: Conectat (Neautentificat)");
+            tvSub.setTextColor(isAuth ? 0xFF34D399 : 0xFF718096);
+            tvSub.setTextSize(11);
+            item.addView(tvSub);
+
+            if (i < clients.size() - 1) {
+                View div = new View(this);
+                LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+                        LinearLayout.LayoutParams.MATCH_PARENT, 1
+                );
+                lp.setMargins(0, 8, 0, 0);
+                div.setLayoutParams(lp);
+                div.setBackgroundColor(0xFF2D3748);
+                item.addView(div);
+            }
+
+            layoutConnectionsList.addView(item);
         }
     }
 

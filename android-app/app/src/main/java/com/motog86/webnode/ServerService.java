@@ -37,6 +37,7 @@ public class ServerService extends Service {
     public static volatile String mdnsAddress = "http://g86.local:8080";
     public static volatile String cloudflareAddress = "";
 
+    private boolean isStarting = false;
     private PowerManager.WakeLock wakeLock;
     private Process pbProcess;
     private Process torProcess;
@@ -64,11 +65,12 @@ public class ServerService extends Service {
         return START_STICKY;
     }
 
-    private void startServer() {
-        if (isRunning && pbProcess != null && torProcess != null) {
+    private synchronized void startServer() {
+        if (isStarting || (isRunning && pbProcess != null)) {
             broadcastStatus();
             return;
         }
+        isStarting = true;
         isRunning = true;
         localAddress = getLocalIpAddress();
 
@@ -79,24 +81,51 @@ public class ServerService extends Service {
             try {
                 broadcastLog("[Sistem] Verificare fisiere web...");
 
-                File publicDir = new File(getFilesDir(), "public");
-                ProcessHelper.copyAssetFolder(this, "public", publicDir);
+                File g86Dir = ProcessHelper.getG86StorageDir(this);
+                File extPublic = new File(g86Dir, "public");
+                File intPublic = new File(getFilesDir(), "public");
+                ProcessHelper.copyAssetFolder(this, "public", intPublic);
+                if (!extPublic.exists() || extPublic.list() == null || extPublic.list().length == 0) {
+                    ProcessHelper.copyAssetFolder(this, "public", extPublic);
+                }
+                File publicDir = extPublic.exists() ? extPublic : intPublic;
 
                 File pbExec = ProcessHelper.getExecutable(this, "libpocketbase.so");
-                File torExec = ProcessHelper.getExecutable(this, "libtor.so");
-
-                if (pbExec == null || torExec == null) {
-                    broadcastLog("[Eroare] Binarele native lipsesc!");
+                if (pbExec == null) {
+                    broadcastLog("[Eroare] Binarul PocketBase lipseste!");
                     stopServer();
                     return;
                 }
 
+                File extPbData = new File(g86Dir, "pb_data");
+                if (!extPbData.exists()) extPbData.mkdirs();
+
                 File pbData = new File(getFilesDir(), "pb_data");
                 if (!pbData.exists()) pbData.mkdirs();
 
-                // 1. Start PocketBase
+                // RESTAURARE AUTOMATĂ: Daca exista o baza de date valida in /sdcard/g86/pb_data, o restaureaza
+                File extDb = new File(extPbData, "data.db");
+                File intDb = new File(pbData, "data.db");
+                if (ProcessHelper.isValidSqliteDb(extDb)) {
+                    if (!ProcessHelper.isValidSqliteDb(intDb) || extDb.lastModified() > intDb.lastModified()) {
+                        try {
+                            File[] files = extPbData.listFiles();
+                            if (files != null) {
+                                for (File f : files) {
+                                    if (f.isFile()) {
+                                        ProcessHelper.copyFileOrFolder(f, new File(pbData, f.getName()));
+                                    }
+                                }
+                            }
+                            broadcastLog("[Stocare] Baza de date restaurata din: " + extDb.getAbsolutePath());
+                        } catch (Exception ignored) {}
+                    }
+                }
+
+                // 1. Start PocketBase cu filesDir (pentru viteza maxima si compatibilitate totala SQLite WAL)
                 if (pbProcess == null) {
                     broadcastLog("[PocketBase] Pornire pe port 8080 (" + localAddress + ")...");
+                    broadcastLog("[Stocare] Folder sincronizat: " + g86Dir.getAbsolutePath());
                     String[] pbCmd = {
                             pbExec.getAbsolutePath(),
                             "serve",
@@ -107,45 +136,38 @@ public class ServerService extends Service {
                     pbProcess = ProcessHelper.startProcess(pbCmd, getFilesDir(), line -> {
                         broadcastLog("[PocketBase] " + line);
                     });
+                    startStorageSync();
                 }
 
-                // 2. Start Tor
-                if (torProcess == null) {
-                    broadcastLog("[Tor] Pornire serviciu .onion...");
-                    File torrc = ProcessHelper.createTorConfig(this, 8080);
-                    String[] torCmd = {
-                            torExec.getAbsolutePath(),
-                            "-f", torrc.getAbsolutePath()
-                    };
-                    torProcess = ProcessHelper.startProcess(torCmd, getFilesDir(), line -> {
-                        broadcastLog("[Tor] " + line);
-                    });
-                }
+                // 2. Tor & Cloudflare (Dezactivate temporar pentru mod de dezvoltare ultra-rapid)
+                boolean enableTunnels = false;
+                if (enableTunnels) {
+                    File torExec = ProcessHelper.getExecutable(this, "libtor.so");
+                    if (torExec != null && torProcess == null) {
+                        broadcastLog("[Tor] Pornire serviciu .onion...");
+                        File torrc = ProcessHelper.createTorConfig(this, 8080);
+                        String[] torCmd = { torExec.getAbsolutePath(), "-f", torrc.getAbsolutePath() };
+                        torProcess = ProcessHelper.startProcess(torCmd, getFilesDir(), line -> broadcastLog("[Tor] " + line));
+                    }
 
-                // 3. Start Cloudflare Tunnel
-                File cfExec = ProcessHelper.getExecutable(this, "libcloudflared.so");
-                if (cfExec != null && cloudflaredProcess == null) {
-                    broadcastLog("[Cloudflare] Pornire tunel securizat HTTPS...");
-                    String[] cfCmd = {
-                            cfExec.getAbsolutePath(),
-                            "tunnel",
-                            "--url", "http://127.0.0.1:8080"
-                    };
-                    cloudflaredProcess = ProcessHelper.startProcess(cfCmd, getFilesDir(), line -> {
-                        broadcastLog("[Cloudflare] " + line);
-                        if (line.contains("trycloudflare.com")) {
-                            int httpsIdx = line.indexOf("https://");
-                            if (httpsIdx != -1) {
-                                int endIdx = line.indexOf(".trycloudflare.com", httpsIdx) + ".trycloudflare.com".length();
-                                if (endIdx > httpsIdx) {
-                                    cloudflareAddress = line.substring(httpsIdx, endIdx).trim();
-                                    broadcastLog("[Cloudflare Succes] Adresa activa: " + cloudflareAddress);
-                                    broadcastStatus();
-                                    updateNotification("Cloudflare: " + cloudflareAddress);
+                    File cfExec = ProcessHelper.getExecutable(this, "libcloudflared.so");
+                    if (cfExec != null && cloudflaredProcess == null) {
+                        broadcastLog("[Cloudflare] Pornire tunel securizat HTTPS...");
+                        String[] cfCmd = { cfExec.getAbsolutePath(), "tunnel", "--url", "http://127.0.0.1:8080" };
+                        cloudflaredProcess = ProcessHelper.startProcess(cfCmd, getFilesDir(), line -> {
+                            broadcastLog("[Cloudflare] " + line);
+                            if (line.contains("trycloudflare.com")) {
+                                int httpsIdx = line.indexOf("https://");
+                                if (httpsIdx != -1) {
+                                    int endIdx = line.indexOf(".trycloudflare.com", httpsIdx) + ".trycloudflare.com".length();
+                                    if (endIdx > httpsIdx) {
+                                        cloudflareAddress = line.substring(httpsIdx, endIdx).trim();
+                                        broadcastStatus();
+                                    }
                                 }
                             }
-                        }
-                    });
+                        });
+                    }
                 }
 
                 broadcastStatus();
@@ -155,6 +177,8 @@ public class ServerService extends Service {
                 Log.e(TAG, "Eroare la pornire", e);
                 broadcastLog("[Eroare Pornire] " + e.getMessage());
                 stopServer();
+            } finally {
+                isStarting = false;
             }
         }).start();
     }
@@ -204,10 +228,12 @@ public class ServerService extends Service {
     }
 
     private void monitorOnionHostname() {
-        File hsFile = new File(getFilesDir(), "tor_data/hs/hostname");
+        File g86HsFile = new File(ProcessHelper.getG86StorageDir(this), "tor_data/hs/hostname");
+        File fallbackHsFile = new File(getFilesDir(), "tor_data/hs/hostname");
         new Thread(() -> {
             int attempts = 0;
             while (isRunning && attempts < 90) {
+                File hsFile = g86HsFile.exists() ? g86HsFile : fallbackHsFile;
                 if (hsFile.exists()) {
                     try (BufferedReader reader = new BufferedReader(new FileReader(hsFile))) {
                         String line = reader.readLine();
@@ -228,7 +254,46 @@ public class ServerService extends Service {
         }).start();
     }
 
-    private void stopServer() {
+    private void startStorageSync() {
+        new Thread(() -> {
+            while (isRunning) {
+                syncDatabaseToExternal();
+                try {
+                    Thread.sleep(10000);
+                } catch (InterruptedException ignored) {}
+            }
+        }).start();
+    }
+
+    private void syncDatabaseToExternal() {
+        try {
+            File intPbData = new File(getFilesDir(), "pb_data");
+            File intDb = new File(intPbData, "data.db");
+            if (ProcessHelper.isValidSqliteDb(intDb)) {
+                File extPb = new File(ProcessHelper.getG86StorageDir(this), "pb_data");
+                if (!extPb.exists()) extPb.mkdirs();
+                File[] files = intPbData.listFiles();
+                if (files != null) {
+                    for (File f : files) {
+                        if (f.isFile()) {
+                            ProcessHelper.copyFileOrFolder(f, new File(extPb, f.getName()));
+                        }
+                    }
+                }
+            }
+
+            File intHs = new File(getFilesDir(), "tor_data/hs");
+            if (intHs.exists()) {
+                File extHs = new File(ProcessHelper.getG86StorageDir(this), "tor_data/hs");
+                if (!extHs.exists()) extHs.mkdirs();
+                ProcessHelper.copyFileOrFolder(intHs, extHs);
+            }
+        } catch (Exception ignored) {}
+    }
+
+    private synchronized void stopServer() {
+        syncDatabaseToExternal();
+        isStarting = false;
         isRunning = false;
         unregisterMdns();
         if (pbProcess != null) {

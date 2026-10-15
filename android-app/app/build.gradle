@@ -36,6 +36,7 @@ android {
     packaging {
         jniLibs {
             useLegacyPackaging = true
+            excludes += ['**/libtor.so', '**/libcloudflared.so']
         }
     }
 }

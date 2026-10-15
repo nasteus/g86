@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="ro">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>g86 - Node Backend Control</title>
+    <link rel="stylesheet" href="backend.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Header -->
+        <header class="node-header">
+            <div class="logo-group">
+                <svg class="node-icon" viewBox="0 0 100 100">
+                    <circle cx="50" cy="50" r="42" fill="none" stroke="#10b981" stroke-width="12"/>
+                    <circle cx="50" cy="50" r="20" fill="#10b981"/>
+                </svg>
+                <div class="header-titles">
+                    <h1 class="brand-title">g86</h1>
+                    <span id="nodeStatus" class="status-badge online">Online</span>
+                </div>
+            </div>
+            <div class="header-actions">
+                <a href="/_/" target="_blank" class="btn-db-admin" title="Panou Bază de Date (PocketBase Admin)">⚙️ DB</a>
+                <button id="btnToggleServer" class="btn-toggle stop">Oprește</button>
+            </div>
+        </header>
+
+        <!-- Hardware & Power Stats (RAM & Baterie) -->
+        <section class="stats-row">
+            <div class="stat-card">
+                <span class="stat-label">MEMORIE RAM</span>
+                <span id="valRam" class="stat-value val-emerald">12 GB (Disponibil)</span>
+            </div>
+            <div class="stat-card">
+                <span class="stat-label">BATERIE / ALIMENTARE</span>
+                <span id="valBattery" class="stat-value val-cyan">83%</span>
+            </div>
+        </section>
+
+        <!-- Dropdown Card: Adrese de conectare & Cod QR -->
+        <section class="dropdown-card" id="cardAddresses">
+            <div class="dropdown-header" id="headerAddresses" onclick="toggleDropdown('contentAddresses', 'arrowAddresses')">
+                <span class="dropdown-title">Adrese de conectare &amp; Cod QR</span>
+                <span id="arrowAddresses" class="dropdown-arrow">▼</span>
+            </div>
+            <div id="contentAddresses" class="dropdown-content hidden">
+                <div class="address-item">
+                    <div class="address-info">
+                        <span class="address-label">Rețea Locală (Wi-Fi)</span>
+                        <span id="addrLocal" class="address-val">http://192.168.1.137:8080</span>
+                    </div>
+                    <button class="btn-copy" onclick="copyText('addrLocal')">Copiază</button>
+                </div>
+                <div class="address-item">
+                    <div class="address-info">
+                        <span class="address-label">Rețea Tor (.onion)</span>
+                        <span id="addrTor" class="address-val disabled">Dezactivat temporar (Mod Rapid)</span>
+                    </div>
+                    <button class="btn-copy disabled">Copiază</button>
+                </div>
+                <div class="address-item">
+                    <div class="address-info">
+                        <span class="address-label">Tunel Cloudflare (HTTPS)</span>
+                        <span id="addrCloudflare" class="address-val disabled">Dezactivat temporar (Mod Rapid)</span>
+                    </div>
+                    <button class="btn-copy disabled">Copiază</button>
+                </div>
+                <div class="qr-container">
+                    <div class="qr-box">
+                        <canvas id="qrCanvas" width="160" height="160"></canvas>
+                    </div>
+                    <span class="qr-hint">Scanează pentru acces instant din rețeaua locală</span>
+                </div>
+            </div>
+        </section>
+
+        <!-- Dropdown Card: Conexiuni active -->
+        <section class="dropdown-card" id="cardConnections">
+            <div class="dropdown-header" id="headerConnections">
+                <div class="dropdown-title-group" onclick="toggleDropdown('contentConnections', 'arrowConnections')">
+                    <span id="titleConnections" class="dropdown-title">Conexiuni active (0)</span>
+                    <span id="arrowConnections" class="dropdown-arrow">▼</span>
+                </div>
+                <button class="btn-refresh-header" onclick="manualRefreshConnections(event)" title="Reîmprospătează lista">
+                    🔄
+                </button>
+            </div>
+            <div id="contentConnections" class="dropdown-content hidden">
+                <div id="connectionsList" class="connections-list">
+                    <div id="emptyConnections" class="empty-state">Nicio conexiune activă în acest moment</div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Console Output & Server Logs -->
+        <section class="console-section">
+            <div class="console-header">
+                <span class="console-title">CONSOLE OUTPUT &amp; SERVER LOGS:</span>
+                <button class="btn-clear-logs" onclick="clearLogs()">Golește</button>
+            </div>
+            <div id="consoleLogs" class="console-terminal">
+                <div class="log-entry system">[Sistem] Nodul g86 este inițializat și activ.</div>
+                <div class="log-entry info">[PocketBase] Server pornit pe 0.0.0.0:8080 / 8787</div>
+            </div>
+        </section>
+    </div>
+
+    <!-- Scripturi de suport și QR code generator -->
+    <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
+    <script src="backend.js"></script>
+</body>
+</html>

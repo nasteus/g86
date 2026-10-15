@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <androidx.coordinatorlayout.widget.CoordinatorLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/coordinatorLayout"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="@color/bg_dark">
@@ -39,16 +40,17 @@
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="Moto G86 Web Node"
+                        android:text="g86"
+                        android:fontFamily="@font/outfit"
                         android:textColor="@color/text_primary"
-                        android:textSize="20sp"
+                        android:textSize="24sp"
                         android:textStyle="bold" />
 
                     <TextView
                         android:id="@+id/tvStatus"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="Status: OPRIT"
+                        android:text="Offline"
                         android:textColor="@color/text_secondary"
                         android:textSize="13sp" />
                 </LinearLayout>
@@ -62,173 +64,7 @@
                     app:cornerRadius="8dp" />
             </LinearLayout>
 
-            <!-- Addresses Card -->
-            <com.google.android.material.card.MaterialCardView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginBottom="16dp"
-                app:cardBackgroundColor="@color/card_bg"
-                app:strokeColor="@color/border_color"
-                app:strokeWidth="1dp"
-                app:cardCornerRadius="12dp">
-
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:orientation="vertical"
-                    android:padding="16dp">
-
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="Adresă Rețea Locală (Wi-Fi / Clearnet):"
-                        android:textColor="@color/text_secondary"
-                        android:textSize="12sp"
-                        android:textAllCaps="true" />
-
-                    <LinearLayout
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:gravity="center_vertical"
-                        android:layout_marginTop="4dp"
-                        android:layout_marginBottom="14dp">
-
-                        <TextView
-                            android:id="@+id/tvLocalUrl"
-                            android:layout_width="0dp"
-                            android:layout_height="wrap_content"
-                            android:layout_weight="1"
-                            android:text="http://g86.local:8080 (sau IP)"
-                            android:textColor="@color/accent_cyan"
-                            android:textSize="15sp"
-                            android:textStyle="bold" />
-
-                        <com.google.android.material.button.MaterialButton
-                            android:id="@+id/btnCopyLocal"
-                            style="@style/Widget.Material3.Button.TonalButton"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:text="Copiază"
-                            android:textSize="12sp"
-                            app:cornerRadius="6dp" />
-                    </LinearLayout>
-
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="Adresă Tor Hidden Service (.onion):"
-                        android:textColor="@color/text_secondary"
-                        android:textSize="12sp"
-                        android:textAllCaps="true" />
-
-                    <LinearLayout
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:gravity="center_vertical"
-                        android:layout_marginTop="4dp">
-
-                        <TextView
-                            android:id="@+id/tvOnionUrl"
-                            android:layout_width="0dp"
-                            android:layout_height="wrap_content"
-                            android:layout_weight="1"
-                            android:text="Se generează cheile Tor..."
-                            android:textColor="@color/accent_tor"
-                            android:textSize="13sp"
-                            android:textStyle="bold" />
-
-                        <com.google.android.material.button.MaterialButton
-                            android:id="@+id/btnCopyOnion"
-                            style="@style/Widget.Material3.Button.TonalButton"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:text="Copiază"
-                            android:textSize="12sp"
-                            app:cornerRadius="6dp" />
-                    </LinearLayout>
-
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="Adresă Cloudflare Tunnel (HTTPS Global):"
-                        android:textColor="@color/text_secondary"
-                        android:textSize="12sp"
-                        android:textAllCaps="true"
-                        android:layout_marginTop="14dp" />
-
-                    <LinearLayout
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:gravity="center_vertical"
-                        android:layout_marginTop="4dp">
-
-                        <TextView
-                            android:id="@+id/tvCloudflareUrl"
-                            android:layout_width="0dp"
-                            android:layout_height="wrap_content"
-                            android:layout_weight="1"
-                            android:text="Se conectează la Cloudflare..."
-                            android:textColor="@color/accent_orange"
-                            android:textSize="13sp"
-                            android:textStyle="bold" />
-
-                        <com.google.android.material.button.MaterialButton
-                            android:id="@+id/btnCopyCloudflare"
-                            style="@style/Widget.Material3.Button.TonalButton"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:text="Copiază"
-                            android:textSize="12sp"
-                            app:cornerRadius="6dp" />
-                    </LinearLayout>
-                </LinearLayout>
-            </com.google.android.material.card.MaterialCardView>
-
-            <!-- QR Code Section -->
-            <com.google.android.material.card.MaterialCardView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginBottom="16dp"
-                app:cardBackgroundColor="@color/card_bg"
-                app:strokeColor="@color/border_color"
-                app:strokeWidth="1dp"
-                app:cardCornerRadius="12dp">
-
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:orientation="vertical"
-                    android:gravity="center"
-                    android:padding="16dp">
-
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="Scanează pentru Conectare Rapidă"
-                        android:textColor="@color/text_primary"
-                        android:textSize="14sp"
-                        android:textStyle="bold"
-                        android:layout_marginBottom="8dp" />
-
-                    <ImageView
-                        android:id="@+id/ivQrCode"
-                        android:layout_width="160dp"
-                        android:layout_height="160dp"
-                        android:background="#FFFFFF"
-                        android:padding="8dp"
-                        android:layout_marginBottom="8dp" />
-
-                    <TextView
-                        android:id="@+id/tvQrLabel"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="QR pentru rețeaua locală"
-                        android:textColor="@color/text_secondary"
-                        android:textSize="12sp" />
-                </LinearLayout>
-            </com.google.android.material.card.MaterialCardView>
-
-            <!-- Hardware & Power Stats -->
+            <!-- Hardware & Power Stats (RAM & Baterie - deasupra Adreselor) -->
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
@@ -262,7 +98,7 @@
                             android:id="@+id/tvRamUsage"
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:text="12 GB Total"
+                            android:text="12 GB (Disponibil)"
                             android:textColor="@color/accent_emerald"
                             android:textSize="16sp"
                             android:textStyle="bold" />
@@ -304,6 +140,311 @@
                 </com.google.android.material.card.MaterialCardView>
             </LinearLayout>
 
+            <!-- Dropdown Card: Adrese de conectare & Cod QR -->
+            <com.google.android.material.card.MaterialCardView
+                android:id="@+id/cardAddresses"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="16dp"
+                app:cardBackgroundColor="@color/card_bg"
+                app:strokeColor="@color/border_color"
+                app:strokeWidth="1dp"
+                app:cardCornerRadius="12dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical">
+
+                    <!-- Header Dropdown (Clickabil) -->
+                    <LinearLayout
+                        android:id="@+id/layoutAddressesHeader"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:gravity="center_vertical"
+                        android:padding="16dp"
+                        android:background="?attr/selectableItemBackground"
+                        android:clickable="true"
+                        android:focusable="true">
+
+                        <TextView
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:text="Adrese de conectare &amp; Cod QR"
+                            android:textColor="@color/text_primary"
+                            android:textSize="14sp"
+                            android:textStyle="bold" />
+
+                        <TextView
+                            android:id="@+id/tvAddressesArrow"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="▼"
+                            android:textColor="@color/accent_cyan"
+                            android:textSize="14sp"
+                            android:paddingStart="8dp"
+                            android:paddingEnd="4dp" />
+                    </LinearLayout>
+
+                    <!-- Continut Expandabil Dropdown -->
+                    <LinearLayout
+                        android:id="@+id/layoutAddressesContent"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical"
+                        android:paddingStart="16dp"
+                        android:paddingEnd="16dp"
+                        android:paddingBottom="16dp"
+                        android:visibility="gone">
+
+                        <View
+                            android:layout_width="match_parent"
+                            android:layout_height="1dp"
+                            android:background="@color/border_color"
+                            android:layout_marginBottom="14dp" />
+
+                        <!-- Adresă Wi-Fi Locală -->
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Adresă Rețea Locală (Wi-Fi / Clearnet):"
+                            android:textColor="@color/text_secondary"
+                            android:textSize="12sp"
+                            android:textAllCaps="true" />
+
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:gravity="center_vertical"
+                            android:layout_marginTop="4dp"
+                            android:layout_marginBottom="14dp">
+
+                            <TextView
+                                android:id="@+id/tvLocalUrl"
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"
+                                android:text="http://g86.local:8080 (sau IP)"
+                                android:textColor="@color/accent_cyan"
+                                android:textSize="14sp"
+                                android:textStyle="bold" />
+
+                            <com.google.android.material.button.MaterialButton
+                                android:id="@+id/btnCopyLocal"
+                                style="@style/Widget.Material3.Button.TonalButton"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="Copiază"
+                                android:textSize="12sp"
+                                app:cornerRadius="6dp" />
+                        </LinearLayout>
+
+                        <!-- Adresă Tor Hidden Service -->
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Adresă Tor Hidden Service (.onion):"
+                            android:textColor="@color/text_secondary"
+                            android:textSize="12sp"
+                            android:textAllCaps="true" />
+
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:gravity="center_vertical"
+                            android:layout_marginTop="4dp"
+                            android:layout_marginBottom="14dp">
+
+                            <TextView
+                                android:id="@+id/tvOnionUrl"
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"
+                                android:text="Se generează cheile Tor..."
+                                android:textColor="@color/accent_tor"
+                                android:textSize="12sp"
+                                android:textStyle="bold" />
+
+                            <com.google.android.material.button.MaterialButton
+                                android:id="@+id/btnCopyOnion"
+                                style="@style/Widget.Material3.Button.TonalButton"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="Copiază"
+                                android:textSize="12sp"
+                                app:cornerRadius="6dp" />
+                        </LinearLayout>
+
+                        <!-- Adresă Cloudflare Tunnel -->
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Adresă Cloudflare Tunnel (HTTPS Global):"
+                            android:textColor="@color/text_secondary"
+                            android:textSize="12sp"
+                            android:textAllCaps="true" />
+
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:gravity="center_vertical"
+                            android:layout_marginTop="4dp"
+                            android:layout_marginBottom="16dp">
+
+                            <TextView
+                                android:id="@+id/tvCloudflareUrl"
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"
+                                android:text="Se conectează la Cloudflare..."
+                                android:textColor="@color/accent_orange"
+                                android:textSize="12sp"
+                                android:textStyle="bold" />
+
+                            <com.google.android.material.button.MaterialButton
+                                android:id="@+id/btnCopyCloudflare"
+                                style="@style/Widget.Material3.Button.TonalButton"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="Copiază"
+                                android:textSize="12sp"
+                                app:cornerRadius="6dp" />
+                        </LinearLayout>
+
+                        <!-- Secțiune Cod QR integrată în interiorul aceluiași dropdown -->
+                        <View
+                            android:layout_width="match_parent"
+                            android:layout_height="1dp"
+                            android:background="@color/border_color"
+                            android:layout_marginBottom="14dp" />
+
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="vertical"
+                            android:gravity="center"
+                            android:layout_marginTop="4dp">
+
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="Scanează pentru Conectare Rapidă"
+                                android:textColor="@color/text_primary"
+                                android:textSize="13sp"
+                                android:textStyle="bold"
+                                android:layout_marginBottom="8dp" />
+
+                            <ImageView
+                                android:id="@+id/ivQrCode"
+                                android:layout_width="160dp"
+                                android:layout_height="160dp"
+                                android:background="#FFFFFF"
+                                android:padding="8dp"
+                                android:layout_marginBottom="8dp" />
+
+                            <TextView
+                                android:id="@+id/tvQrLabel"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="QR pentru rețeaua locală"
+                                android:textColor="@color/text_secondary"
+                                android:textSize="12sp" />
+                        </LinearLayout>
+
+                    </LinearLayout>
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
+            <!-- Dropdown Card: Conexiuni active -->
+            <com.google.android.material.card.MaterialCardView
+                android:id="@+id/cardConnections"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="16dp"
+                app:cardBackgroundColor="@color/card_bg"
+                app:strokeColor="@color/border_color"
+                app:strokeWidth="1dp"
+                app:cardCornerRadius="12dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical">
+
+                    <!-- Header Dropdown (Clickabil) -->
+                    <LinearLayout
+                        android:id="@+id/layoutConnectionsHeader"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:gravity="center_vertical"
+                        android:padding="16dp"
+                        android:background="?attr/selectableItemBackground"
+                        android:clickable="true"
+                        android:focusable="true">
+
+                        <TextView
+                            android:id="@+id/tvConnectionsTitle"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:text="Conexiuni active (0)"
+                            android:textColor="@color/text_primary"
+                            android:textSize="14sp"
+                            android:textStyle="bold" />
+
+                        <TextView
+                            android:id="@+id/tvConnectionsArrow"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="▼"
+                            android:textColor="@color/accent_cyan"
+                            android:textSize="14sp"
+                            android:paddingStart="8dp"
+                            android:paddingEnd="4dp" />
+                    </LinearLayout>
+
+                    <!-- Continut Expandabil Dropdown (Implicit colapsat) -->
+                    <LinearLayout
+                        android:id="@+id/layoutConnectionsContent"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical"
+                        android:paddingStart="16dp"
+                        android:paddingEnd="16dp"
+                        android:paddingBottom="16dp"
+                        android:visibility="gone">
+
+                        <View
+                            android:layout_width="match_parent"
+                            android:layout_height="1dp"
+                            android:background="@color/border_color"
+                            android:layout_marginBottom="12dp" />
+
+                        <!-- Lista dinamica de conexiuni -->
+                        <LinearLayout
+                            android:id="@+id/layoutConnectionsList"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="vertical" />
+
+                        <!-- Mesaj cand nu e nicio conexiune -->
+                        <TextView
+                            android:id="@+id/tvEmptyConnections"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:text="Nicio conexiune activă în acest moment"
+                            android:textColor="@color/text_secondary"
+                            android:textSize="12sp"
+                            android:gravity="center"
+                            android:padding="8dp" />
+
+                    </LinearLayout>
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
             <!-- Console Log -->
             <TextView
                 android:layout_width="wrap_content"
@@ -328,7 +469,7 @@
                     android:textColor="#A0AEC0"
                     android:fontFamily="monospace"
                     android:textSize="11sp"
-                    android:text="[System] Initializare aplicatie Moto G86 Node...\n" />
+                    android:text="[System] Initializare aplicatie g86...\n" />
             </ScrollView>
 
         </LinearLayout>
