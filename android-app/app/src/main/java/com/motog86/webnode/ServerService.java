@@ -139,8 +139,8 @@ public class ServerService extends Service {
                     startStorageSync();
                 }
 
-                // 2. Tor & Cloudflare (Dezactivate temporar pentru mod de dezvoltare ultra-rapid)
-                boolean enableTunnels = false;
+                // 2. Tor & Cloudflare (Active cu servicii .onion si tunel HTTPS)
+                boolean enableTunnels = true;
                 if (enableTunnels) {
                     File torExec = ProcessHelper.getExecutable(this, "libtor.so");
                     if (torExec != null && torProcess == null) {
