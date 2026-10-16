@@ -224,10 +224,17 @@
                             android:background="@color/accent_blue" />
 
                         <View
+                            android:id="@+id/viewRamRed"
+                            android:layout_width="0dp"
+                            android:layout_height="match_parent"
+                            android:layout_weight="5"
+                            android:background="@color/accent_red" />
+
+                        <View
                             android:id="@+id/viewRamCache"
                             android:layout_width="0dp"
                             android:layout_height="match_parent"
-                            android:layout_weight="45"
+                            android:layout_weight="40"
                             android:background="@color/accent_yellow" />
 
                         <View
@@ -250,9 +257,19 @@
                             android:layout_width="0dp"
                             android:layout_height="wrap_content"
                             android:layout_weight="1"
-                            android:text="🔵 Utilizat: --"
+                            android:text="🔵 Sistem: --"
                             android:textColor="@color/text_secondary"
-                            android:textSize="10sp" />
+                            android:textSize="9.5sp" />
+
+                        <TextView
+                            android:id="@+id/tvRamRedLegend"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:text="🔴 RAM: --"
+                            android:textColor="@color/text_secondary"
+                            android:textSize="9.5sp"
+                            android:gravity="center" />
 
                         <TextView
                             android:id="@+id/tvRamCacheLegend"
@@ -261,7 +278,7 @@
                             android:layout_weight="1"
                             android:text="🟡 Cache: --"
                             android:textColor="@color/text_secondary"
-                            android:textSize="10sp"
+                            android:textSize="9.5sp"
                             android:gravity="center" />
 
                         <TextView
@@ -269,9 +286,9 @@
                             android:layout_width="0dp"
                             android:layout_height="wrap_content"
                             android:layout_weight="1"
-                            android:text="🟢 Liber: --"
+                            android:text="🟢 Disponibil: --"
                             android:textColor="@color/text_secondary"
-                            android:textSize="10sp"
+                            android:textSize="9.5sp"
                             android:gravity="end" />
                     </LinearLayout>
                 </LinearLayout>

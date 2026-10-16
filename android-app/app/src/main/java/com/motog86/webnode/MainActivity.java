@@ -57,9 +57,11 @@ public class MainActivity extends AppCompatActivity {
     private ProgressBar pbBattery;
     private TextView tvRamDetails;
     private View viewRamUsed;
+    private View viewRamRed;
     private View viewRamCache;
     private View viewRamFree;
     private TextView tvRamUsedLegend;
+    private TextView tvRamRedLegend;
     private TextView tvRamCacheLegend;
     private TextView tvRamFreeLegend;
     private TextView tvTrafficRxSpeed;
@@ -191,9 +193,11 @@ public class MainActivity extends AppCompatActivity {
         pbBattery = findViewById(R.id.pbBattery);
         tvRamDetails = findViewById(R.id.tvRamDetails);
         viewRamUsed = findViewById(R.id.viewRamUsed);
+        viewRamRed = findViewById(R.id.viewRamRed);
         viewRamCache = findViewById(R.id.viewRamCache);
         viewRamFree = findViewById(R.id.viewRamFree);
         tvRamUsedLegend = findViewById(R.id.tvRamUsedLegend);
+        tvRamRedLegend = findViewById(R.id.tvRamRedLegend);
         tvRamCacheLegend = findViewById(R.id.tvRamCacheLegend);
         tvRamFreeLegend = findViewById(R.id.tvRamFreeLegend);
         tvTrafficRxSpeed = findViewById(R.id.tvTrafficRxSpeed);
@@ -406,6 +410,7 @@ public class MainActivity extends AppCompatActivity {
             final long finalAppMemMb = appMemMb;
 
             int wUsed = Math.max(1, (int) (usedGb * 10));
+            int wRed = Math.max(3, (int) (finalAppMemMb / 40));
             int wCache = Math.max(1, (int) (cacheGb * 10));
             int wFree = Math.max(1, (int) (freeGb * 10));
 
@@ -413,10 +418,14 @@ public class MainActivity extends AppCompatActivity {
                 if (tvRamDetails != null) {
                     tvRamDetails.setText(String.format(Locale.US, "g86: %d MB • 12 GB Total", finalAppMemMb));
                 }
-                if (viewRamUsed != null && viewRamCache != null && viewRamFree != null) {
+                if (viewRamUsed != null && viewRamRed != null && viewRamCache != null && viewRamFree != null) {
                     LinearLayout.LayoutParams lpU = (LinearLayout.LayoutParams) viewRamUsed.getLayoutParams();
                     lpU.weight = wUsed;
                     viewRamUsed.setLayoutParams(lpU);
+
+                    LinearLayout.LayoutParams lpR = (LinearLayout.LayoutParams) viewRamRed.getLayoutParams();
+                    lpR.weight = wRed;
+                    viewRamRed.setLayoutParams(lpR);
 
                     LinearLayout.LayoutParams lpC = (LinearLayout.LayoutParams) viewRamCache.getLayoutParams();
                     lpC.weight = wCache;
@@ -428,6 +437,9 @@ public class MainActivity extends AppCompatActivity {
                 }
                 if (tvRamUsedLegend != null) {
                     tvRamUsedLegend.setText(String.format(Locale.US, "🔵 Sistem: %.1f GB", usedGb));
+                }
+                if (tvRamRedLegend != null) {
+                    tvRamRedLegend.setText(String.format(Locale.US, "🔴 RAM: %d MB", finalAppMemMb));
                 }
                 if (tvRamCacheLegend != null) {
                     tvRamCacheLegend.setText(String.format(Locale.US, "🟡 Cache: %.1f GB", cacheGb));
