@@ -986,12 +986,137 @@ input:focus {
 }
 
 /* ========================================================
-   Mobile Compact Optimization for Public Chat (< 640px)
+   Mobile & Portable Compact Optimization (Phones & Tablets)
+   Matches the compact native backend layout on phone (activity_main.xml)
    ======================================================== */
-@media (max-width: 640px) {
-    /* Chat Accordion Card & Header Bar */
+@media (max-width: 900px), (hover: none) and (pointer: coarse) {
+    /* Page Layout & Spacing */
+    body {
+        padding: 12px 10px;
+    }
+
+    .container {
+        max-width: 580px;
+        gap: 10px;
+    }
+
+    /* Header Bar: sleek 22px title like native 24sp */
+    .header {
+        gap: 4px;
+        margin-bottom: 2px;
+    }
+
+    .header h1 {
+        font-size: 1.45rem;
+        letter-spacing: -0.02em;
+    }
+
+    /* PWA Banner */
+    .pwa-banner {
+        padding: 8px 12px;
+        border-radius: 8px;
+        gap: 8px;
+    }
+
+    .pwa-logo {
+        width: 28px;
+        height: 28px;
+        border-radius: 6px;
+    }
+
+    .pwa-info strong {
+        font-size: 0.82rem;
+    }
+
+    .pwa-info p {
+        font-size: 0.70rem;
+    }
+
+    /* Main Container Card (matching native cardCornerRadius="12dp" and compact padding) */
+    .main-card {
+        padding: 12px 14px;
+        border-radius: 12px;
+        box-shadow: 0 10px 25px rgba(0, 0, 0, 0.35);
+    }
+
+    /* User Status Bar */
+    .user-bar {
+        padding: 8px 12px;
+        margin-bottom: 10px;
+        border-radius: 8px;
+        gap: 8px;
+    }
+
+    .user-info {
+        gap: 8px;
+    }
+
+    .avatar {
+        width: 28px;
+        height: 28px;
+        font-size: 0.80rem;
+    }
+
+    .user-greeting {
+        font-size: 0.70rem;
+        line-height: 1.2;
+    }
+
+    #userDisplayEmail {
+        font-size: 0.82rem;
+        line-height: 1.2;
+    }
+
+    .btn-sm {
+        padding: 4px 10px;
+        font-size: 0.75rem;
+        border-radius: 6px;
+    }
+
+    /* Auth Section Tabs & Form (Login / Register) */
+    .tabs {
+        gap: 6px;
+        padding-bottom: 8px;
+        margin-bottom: 12px;
+    }
+
+    .tab-btn {
+        padding: 6px 12px;
+        font-size: 0.82rem;
+        border-radius: 6px;
+    }
+
+    .form-group {
+        gap: 4px;
+        margin-bottom: 10px;
+    }
+
+    .form-group label {
+        font-size: 0.72rem;
+    }
+
+    input {
+        padding: 8px 10px;
+        font-size: 0.82rem;
+        border-radius: 6px;
+    }
+
+    .btn {
+        padding: 8px 14px;
+        font-size: 0.82rem;
+        border-radius: 6px;
+    }
+
+    .feedback-msg {
+        padding: 6px 10px;
+        font-size: 0.75rem;
+        margin-bottom: 10px;
+        border-radius: 6px;
+    }
+
+    /* Chat Accordion Dropdown Card (matching backend dropdown menus) */
     .chat-card {
-        margin-top: 8px;
+        margin-top: 6px;
         border-radius: 10px;
     }
 
@@ -1005,14 +1130,15 @@ input:focus {
     }
 
     .chat-icon-badge {
-        width: 30px;
-        height: 30px;
-        font-size: 1.1rem;
+        width: 26px;
+        height: 26px;
+        font-size: 0.95rem;
         border-radius: 6px;
     }
 
     .chat-title-wrapper h3 {
-        font-size: 0.95rem;
+        font-size: 0.88rem;
+        font-weight: 700;
     }
 
     .chat-header-right {
@@ -1020,35 +1146,36 @@ input:focus {
     }
 
     .security-badge {
-        padding: 3px 8px;
-        font-size: 0.68rem;
+        padding: 2px 7px;
+        font-size: 0.65rem;
         gap: 4px;
+        border-radius: 9999px;
     }
 
     .sec-dot {
-        width: 6px;
-        height: 6px;
+        width: 5px;
+        height: 5px;
     }
 
     .chat-arrow {
-        font-size: 0.75rem;
+        font-size: 0.78rem;
     }
 
     /* Dropdown Body */
     .chat-dropdown-body {
-        padding: 10px;
+        padding: 10px 12px;
         gap: 8px;
     }
 
     /* Chat Messages Container */
     .chat-messages-container {
-        height: 250px;
-        padding: 10px;
+        height: 230px;
+        padding: 8px 10px;
         border-radius: 8px;
     }
 
     .chat-messages-list {
-        gap: 8px;
+        gap: 6px;
     }
 
     /* Message Items & Bubbles */
@@ -1059,126 +1186,153 @@ input:focus {
 
     .chat-msg-header {
         gap: 6px;
-        font-size: 0.68rem;
+        font-size: 0.66rem;
     }
 
     .chat-msg-author {
-        font-size: 0.72rem;
+        font-size: 0.70rem;
     }
 
     .chat-msg-time {
-        font-size: 0.64rem;
+        font-size: 0.62rem;
     }
 
     .chat-msg-bubble {
-        padding: 6px 10px;
-        font-size: 0.82rem;
-        line-height: 1.35;
-        border-radius: 8px;
+        padding: 5px 9px;
+        font-size: 0.78rem;
+        line-height: 1.32;
+        border-radius: 7px;
     }
 
     .msg-scope-badge {
-        font-size: 0.62rem;
+        font-size: 0.60rem;
         padding: 1px 4px;
         margin-left: 4px;
     }
 
     .chat-file-id-tag {
-        padding: 2px 6px;
-        font-size: 0.65rem;
-        margin-top: 4px;
-        gap: 4px;
+        padding: 2px 5px;
+        font-size: 0.62rem;
+        margin-top: 3px;
+        gap: 3px;
     }
 
     .chat-file-id-copy {
-        font-size: 0.65rem;
+        font-size: 0.62rem;
     }
 
     .chat-media-preview-img,
     .chat-media-video {
-        max-height: 170px;
-        border-radius: 6px;
-        margin-top: 5px;
+        max-height: 150px;
+        border-radius: 5px;
+        margin-top: 4px;
     }
 
     .chat-media-doc {
-        padding: 5px 8px;
-        gap: 6px;
-        font-size: 0.76rem;
-        border-radius: 6px;
-        margin-top: 5px;
+        padding: 4px 7px;
+        gap: 5px;
+        font-size: 0.72rem;
+        border-radius: 5px;
+        margin-top: 4px;
     }
 
     .chat-doc-size {
-        font-size: 0.65rem;
+        font-size: 0.62rem;
     }
 
     /* Edit & File Preview Bars */
     .chat-edit-bar {
-        padding: 4px 8px;
-        font-size: 0.74rem;
-        border-radius: 6px;
+        padding: 4px 7px;
+        font-size: 0.70rem;
+        border-radius: 5px;
     }
 
     .btn-cancel-edit {
-        font-size: 0.74rem;
+        font-size: 0.70rem;
     }
 
     .file-preview-bar {
-        padding: 5px 8px;
-        font-size: 0.74rem;
-        border-radius: 6px;
+        padding: 4px 7px;
+        font-size: 0.70rem;
+        border-radius: 5px;
     }
 
     .preview-filesize {
-        font-size: 0.66rem;
+        font-size: 0.64rem;
     }
 
     /* Scope Bar */
     .chat-scope-bar {
         padding: 3px 6px;
-        font-size: 0.72rem;
-        gap: 6px;
+        font-size: 0.70rem;
+        gap: 5px;
+        margin-bottom: 4px;
+        border-radius: 6px;
     }
 
     .btn-scope-pill {
         padding: 2px 6px;
-        font-size: 0.68rem;
+        font-size: 0.66rem;
+        border-radius: 4px;
     }
 
     .chat-recipient-input {
         padding: 3px 6px;
-        font-size: 0.70rem;
+        font-size: 0.68rem;
+        border-radius: 4px;
     }
 
-    /* Input Bar & Buttons */
+    /* Input Bar & Buttons (34px x 34px - 1:1 ratio) */
     .chat-input-box {
         gap: 6px;
     }
 
     .chat-input-box textarea {
-        min-height: 36px;
-        padding: 7px 10px;
-        font-size: 0.84rem;
-        border-radius: 8px;
-        line-height: 1.35;
+        min-height: 34px;
+        padding: 6px 9px;
+        font-size: 0.80rem;
+        border-radius: 7px;
+        line-height: 1.32;
     }
 
     .btn-chat-sq {
-        width: 36px;
-        height: 36px;
-        min-width: 36px;
-        min-height: 36px;
-        border-radius: 8px;
+        width: 34px;
+        height: 34px;
+        min-width: 34px;
+        min-height: 34px;
+        border-radius: 7px;
     }
 
     .paperclip-svg-icon {
-        width: 17px;
-        height: 17px;
+        width: 16px;
+        height: 16px;
     }
 
     .send-svg-icon {
-        width: 17px;
-        height: 17px;
+        width: 16px;
+        height: 16px;
+    }
+
+    /* Message Action Modal Sheet */
+    .modal-sheet {
+        max-width: 320px;
+        border-radius: 10px;
+    }
+
+    .modal-header {
+        padding: 10px 12px;
+        font-size: 0.82rem;
+    }
+
+    .modal-actions {
+        padding: 8px;
+        gap: 6px;
+    }
+
+    .modal-action-btn {
+        padding: 8px 12px;
+        font-size: 0.78rem;
+        border-radius: 6px;
+        gap: 8px;
     }
 }
