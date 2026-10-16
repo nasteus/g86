@@ -18,3 +18,4 @@ __pycache__/
 *.pyc
 local-dev/active_state.json
 local-dev/pb_data/
+local-dev/*.db

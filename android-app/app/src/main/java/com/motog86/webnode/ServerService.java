@@ -122,6 +122,10 @@ public class ServerService extends Service {
                     }
                 }
 
+                // Asigurare limita 100MB pentru atasamente mari (video/fisiere) in schema PocketBase
+                ensureMessagesFieldSizeLimit(intDb);
+                ensureMessagesFieldSizeLimit(extDb);
+
                 // 1. Start PocketBase cu filesDir (pentru viteza maxima si compatibilitate totala SQLite WAL)
                 if (pbProcess == null) {
                     broadcastLog("[PocketBase] Pornire pe port 8080 (" + localAddress + ")...");
@@ -414,6 +418,43 @@ public class ServerService extends Service {
     public void onDestroy() {
         stopServer();
         super.onDestroy();
+    }
+
+    private void ensureMessagesFieldSizeLimit(File dbFile) {
+        if (dbFile == null || !dbFile.exists() || !ProcessHelper.isValidSqliteDb(dbFile)) return;
+        try {
+            android.database.sqlite.SQLiteDatabase db = android.database.sqlite.SQLiteDatabase.openDatabase(
+                    dbFile.getAbsolutePath(), null, android.database.sqlite.SQLiteDatabase.OPEN_READWRITE
+            );
+            android.database.Cursor cursor = db.rawQuery("SELECT fields FROM _collections WHERE name='messages'", null);
+            if (cursor != null) {
+                if (cursor.moveToFirst()) {
+                    String fieldsJson = cursor.getString(0);
+                    org.json.JSONArray arr = new org.json.JSONArray(fieldsJson);
+                    boolean changed = false;
+                    for (int i = 0; i < arr.length(); i++) {
+                        org.json.JSONObject field = arr.getJSONObject(i);
+                        if ("file".equals(field.optString("name"))) {
+                            long currentSize = field.optLong("maxSize", 0);
+                            if (currentSize < 104857600L) { // 100MB
+                                field.put("maxSize", 104857600L);
+                                changed = true;
+                            }
+                        }
+                    }
+                    if (changed) {
+                        android.content.ContentValues cv = new android.content.ContentValues();
+                        cv.put("fields", arr.toString());
+                        db.update("_collections", cv, "name=?", new String[]{"messages"});
+                        broadcastLog("[Stocare] Limita atasament PocketBase actualizata la 100MB!");
+                    }
+                }
+                cursor.close();
+            }
+            db.close();
+        } catch (Exception e) {
+            broadcastLog("[Stocare] Info verificare schema: " + e.getMessage());
+        }
     }
 
     @Override

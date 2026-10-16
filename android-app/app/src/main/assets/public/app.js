@@ -567,6 +567,13 @@ async function processIncomingRecord(action, record) {
             existing.recipient = record.recipient;
             modified = true;
         }
+        if (!existing.file && record.file) {
+            existing.file = record.file;
+            modified = true;
+        } else if (existing.file && record.file && !existing.file.dataUrl && record.file.dataUrl) {
+            existing.file = record.file;
+            modified = true;
+        }
         if (modified) {
             await dbSaveMessage(existing);
             return true;
@@ -935,8 +942,8 @@ function handleFileSelected(e) {
     const file = e.target.files[0];
     if (!file) return;
 
-    if (file.size > 25 * 1024 * 1024) {
-        alert('Fisierul depaseste limita de 25MB.');
+    if (file.size > 50 * 1024 * 1024) {
+        alert('Fisierul depaseste limita de 50MB.');
         e.target.value = '';
         return;
     }

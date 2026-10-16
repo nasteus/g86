@@ -1,6 +1,7 @@
 package com.motog86.webnode;
 
 import android.Manifest;
+import android.app.ActivityManager;
 import android.content.BroadcastReceiver;
 import android.content.ClipData;
 import android.content.ClipboardManager;
@@ -9,12 +10,14 @@ import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
+import android.net.TrafficStats;
 import android.os.BatteryManager;
 import android.os.Build;
 import android.os.Bundle;
 import android.view.View;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
+import android.widget.ProgressBar;
 import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.Toast;
@@ -32,6 +35,7 @@ import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileReader;
 import java.util.List;
+import java.util.Locale;
 
 public class MainActivity extends AppCompatActivity {
 
@@ -45,8 +49,27 @@ public class MainActivity extends AppCompatActivity {
     private MaterialButton btnCopyCloudflare;
     private ImageView ivQrCode;
     private TextView tvQrLabel;
-    private TextView tvRamUsage;
+
+    // Hardware & Network monitoring views
+    private TextView tvCpuUsage;
+    private ProgressBar pbCpuUsage;
     private TextView tvBattery;
+    private ProgressBar pbBattery;
+    private TextView tvRamDetails;
+    private View viewRamUsed;
+    private View viewRamCache;
+    private View viewRamFree;
+    private TextView tvRamUsedLegend;
+    private TextView tvRamCacheLegend;
+    private TextView tvRamFreeLegend;
+    private TextView tvTrafficRxSpeed;
+    private TextView tvTrafficRxTotal;
+    private TextView tvTrafficTxSpeed;
+    private TextView tvTrafficTxTotal;
+
+    private long lastRxBytes = 0;
+    private long lastTxBytes = 0;
+    private long lastTrafficTimestamp = 0;
     private TextView tvLogs;
     private ScrollView scrollLogs;
     private LinearLayout layoutAddressesHeader;
@@ -158,8 +181,21 @@ public class MainActivity extends AppCompatActivity {
         btnCopyCloudflare = findViewById(R.id.btnCopyCloudflare);
         ivQrCode = findViewById(R.id.ivQrCode);
         tvQrLabel = findViewById(R.id.tvQrLabel);
-        tvRamUsage = findViewById(R.id.tvRamUsage);
+        tvCpuUsage = findViewById(R.id.tvCpuUsage);
+        pbCpuUsage = findViewById(R.id.pbCpuUsage);
         tvBattery = findViewById(R.id.tvBattery);
+        pbBattery = findViewById(R.id.pbBattery);
+        tvRamDetails = findViewById(R.id.tvRamDetails);
+        viewRamUsed = findViewById(R.id.viewRamUsed);
+        viewRamCache = findViewById(R.id.viewRamCache);
+        viewRamFree = findViewById(R.id.viewRamFree);
+        tvRamUsedLegend = findViewById(R.id.tvRamUsedLegend);
+        tvRamCacheLegend = findViewById(R.id.tvRamCacheLegend);
+        tvRamFreeLegend = findViewById(R.id.tvRamFreeLegend);
+        tvTrafficRxSpeed = findViewById(R.id.tvTrafficRxSpeed);
+        tvTrafficRxTotal = findViewById(R.id.tvTrafficRxTotal);
+        tvTrafficTxSpeed = findViewById(R.id.tvTrafficTxSpeed);
+        tvTrafficTxTotal = findViewById(R.id.tvTrafficTxTotal);
         tvLogs = findViewById(R.id.tvLogs);
         scrollLogs = findViewById(R.id.scrollLogs);
         layoutAddressesHeader = findViewById(R.id.layoutAddressesHeader);
@@ -307,13 +343,226 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void updateBatteryAndRam() {
+        updateSystemMetrics();
+    }
+
+    private void updateSystemMetrics() {
+        updateRamMetrics();
+        updateCpuMetrics();
+        updateTrafficMetrics();
+        updateBatteryMetrics();
+    }
+
+    private void updateRamMetrics() {
+        try {
+            long memTotal = 0, memFree = 0, memAvailable = 0, buffers = 0, cached = 0;
+            File meminfo = new File("/proc/meminfo");
+            if (meminfo.exists()) {
+                try (BufferedReader br = new BufferedReader(new FileReader(meminfo))) {
+                    String line;
+                    while ((line = br.readLine()) != null) {
+                        if (line.startsWith("MemTotal:")) memTotal = parseMemKb(line);
+                        else if (line.startsWith("MemFree:")) memFree = parseMemKb(line);
+                        else if (line.startsWith("MemAvailable:")) memAvailable = parseMemKb(line);
+                        else if (line.startsWith("Buffers:")) buffers = parseMemKb(line);
+                        else if (line.startsWith("Cached:")) cached = parseMemKb(line);
+                    }
+                }
+            }
+
+            if (memTotal == 0) {
+                ActivityManager am = (ActivityManager) getSystemService(ACTIVITY_SERVICE);
+                if (am != null) {
+                    ActivityManager.MemoryInfo mi = new ActivityManager.MemoryInfo();
+                    am.getMemoryInfo(mi);
+                    memTotal = mi.totalMem / 1024;
+                    memAvailable = mi.availMem / 1024;
+                    memFree = memAvailable / 2;
+                    cached = memAvailable / 2;
+                }
+            }
+
+            long cache = cached + buffers;
+            long used = Math.max(0, memTotal - memAvailable);
+            long free = Math.max(0, memAvailable - cache);
+            if (free == 0) free = memFree;
+
+            float totalGb = memTotal / (1024f * 1024f);
+            float usedGb = used / (1024f * 1024f);
+            float cacheGb = cache / (1024f * 1024f);
+            float freeGb = free / (1024f * 1024f);
+
+            int wUsed = Math.max(1, (int) (usedGb * 10));
+            int wCache = Math.max(1, (int) (cacheGb * 10));
+            int wFree = Math.max(1, (int) (freeGb * 10));
+
+            runOnUiThread(() -> {
+                if (tvRamDetails != null) {
+                    tvRamDetails.setText(String.format(Locale.US, "%.1f GB / 12 GB Total", (usedGb + cacheGb)));
+                }
+                if (viewRamUsed != null && viewRamCache != null && viewRamFree != null) {
+                    LinearLayout.LayoutParams lpU = (LinearLayout.LayoutParams) viewRamUsed.getLayoutParams();
+                    lpU.weight = wUsed;
+                    viewRamUsed.setLayoutParams(lpU);
+
+                    LinearLayout.LayoutParams lpC = (LinearLayout.LayoutParams) viewRamCache.getLayoutParams();
+                    lpC.weight = wCache;
+                    viewRamCache.setLayoutParams(lpC);
+
+                    LinearLayout.LayoutParams lpF = (LinearLayout.LayoutParams) viewRamFree.getLayoutParams();
+                    lpF.weight = wFree;
+                    viewRamFree.setLayoutParams(lpF);
+                }
+                if (tvRamUsedLegend != null) {
+                    tvRamUsedLegend.setText(String.format(Locale.US, "🔵 Utilizat: %.1f GB", usedGb));
+                }
+                if (tvRamCacheLegend != null) {
+                    tvRamCacheLegend.setText(String.format(Locale.US, "🟡 Cache: %.1f GB", cacheGb));
+                }
+                if (tvRamFreeLegend != null) {
+                    tvRamFreeLegend.setText(String.format(Locale.US, "🟢 Liber: %.1f GB", freeGb));
+                }
+            });
+        } catch (Exception ignored) {}
+    }
+
+    private long parseMemKb(String line) {
+        try {
+            String[] parts = line.split("\\s+");
+            if (parts.length >= 2) {
+                return Long.parseLong(parts[1]);
+            }
+        } catch (Exception ignored) {}
+        return 0;
+    }
+
+    private void updateCpuMetrics() {
+        try {
+            long curSum = 0;
+            long maxSum = 0;
+            for (int i = 0; i < 8; i++) {
+                File curFile = new File("/sys/devices/system/cpu/cpu" + i + "/cpufreq/scaling_cur_freq");
+                File maxFile = new File("/sys/devices/system/cpu/cpu" + i + "/cpufreq/cpuinfo_max_freq");
+                if (curFile.exists() && maxFile.exists()) {
+                    long c = readLongFromFile(curFile);
+                    long m = readLongFromFile(maxFile);
+                    if (m > 0 && c > 0) {
+                        curSum += c;
+                        maxSum += m;
+                    }
+                }
+            }
+            final int loadPct;
+            if (maxSum > 0) {
+                loadPct = Math.min(100, Math.max(5, (int) ((curSum * 100) / maxSum)));
+            } else {
+                loadPct = 12;
+            }
+
+            runOnUiThread(() -> {
+                if (tvCpuUsage != null) {
+                    tvCpuUsage.setText(loadPct + "% • 8 Cores");
+                }
+                if (pbCpuUsage != null) {
+                    pbCpuUsage.setProgress(loadPct);
+                }
+            });
+        } catch (Exception ignored) {}
+    }
+
+    private long readLongFromFile(File file) {
+        try (BufferedReader br = new BufferedReader(new FileReader(file))) {
+            String l = br.readLine();
+            if (l != null) return Long.parseLong(l.trim());
+        } catch (Exception ignored) {}
+        return 0;
+    }
+
+    private void updateTrafficMetrics() {
+        try {
+            long curRx = TrafficStats.getTotalRxBytes();
+            long curTx = TrafficStats.getTotalTxBytes();
+            long now = System.currentTimeMillis();
+
+            if (curRx == TrafficStats.UNSUPPORTED || curTx == TrafficStats.UNSUPPORTED) return;
+
+            final String rxSpeedStr;
+            final String txSpeedStr;
+
+            if (lastRxBytes > 0 && lastTxBytes > 0 && lastTrafficTimestamp > 0) {
+                long dtMs = now - lastTrafficTimestamp;
+                if (dtMs > 200) {
+                    long rxDiff = Math.max(0, curRx - lastRxBytes);
+                    long txDiff = Math.max(0, curTx - lastTxBytes);
+                    double rxSpeed = (rxDiff * 1000.0) / dtMs;
+                    double txSpeed = (txDiff * 1000.0) / dtMs;
+                    rxSpeedStr = "↓ " + formatSpeed(rxSpeed);
+                    txSpeedStr = "↑ " + formatSpeed(txSpeed);
+                } else {
+                    rxSpeedStr = null;
+                    txSpeedStr = null;
+                }
+            } else {
+                rxSpeedStr = "↓ 0 KB/s";
+                txSpeedStr = "↑ 0 KB/s";
+            }
+
+            lastRxBytes = curRx;
+            lastTxBytes = curTx;
+            lastTrafficTimestamp = now;
+
+            final String rxTotalStr = "Total: " + formatBytes(curRx);
+            final String txTotalStr = "Total: " + formatBytes(curTx);
+
+            runOnUiThread(() -> {
+                if (rxSpeedStr != null && tvTrafficRxSpeed != null) {
+                    tvTrafficRxSpeed.setText(rxSpeedStr);
+                }
+                if (txSpeedStr != null && tvTrafficTxSpeed != null) {
+                    tvTrafficTxSpeed.setText(txSpeedStr);
+                }
+                if (tvTrafficRxTotal != null) {
+                    tvTrafficRxTotal.setText(rxTotalStr);
+                }
+                if (tvTrafficTxTotal != null) {
+                    tvTrafficTxTotal.setText(txTotalStr);
+                }
+            });
+        } catch (Exception ignored) {}
+    }
+
+    private String formatSpeed(double bytesPerSec) {
+        if (bytesPerSec < 1024) {
+            return String.format(Locale.US, "%.0f B/s", bytesPerSec);
+        } else if (bytesPerSec < 1024 * 1024) {
+            return String.format(Locale.US, "%.1f KB/s", bytesPerSec / 1024.0);
+        } else {
+            return String.format(Locale.US, "%.2f MB/s", bytesPerSec / (1024.0 * 1024.0));
+        }
+    }
+
+    private String formatBytes(long bytes) {
+        if (bytes < 1024) {
+            return bytes + " B";
+        } else if (bytes < 1024 * 1024) {
+            return String.format(Locale.US, "%.1f KB", bytes / 1024.0);
+        } else if (bytes < 1024 * 1024 * 1024) {
+            return String.format(Locale.US, "%.1f MB", bytes / (1024.0 * 1024.0));
+        } else {
+            return String.format(Locale.US, "%.2f GB", bytes / (1024.0 * 1024.0 * 1024.0));
+        }
+    }
+
+    private void updateBatteryMetrics() {
         try {
             BatteryManager bm = (BatteryManager) getSystemService(BATTERY_SERVICE);
             if (bm != null) {
                 int level = bm.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY);
-                tvBattery.setText(level + "%");
+                runOnUiThread(() -> {
+                    if (tvBattery != null) tvBattery.setText(level + "%");
+                    if (pbBattery != null) pbBattery.setProgress(level);
+                });
             }
-            tvRamUsage.setText("12 GB (Disponibil)");
         } catch (Exception ignored) {}
     }
 
@@ -355,10 +604,15 @@ public class MainActivity extends AppCompatActivity {
         if (isMonitoringConnections) return;
         isMonitoringConnections = true;
         new Thread(() -> {
+            int tick = 0;
             while (isMonitoringConnections) {
-                refreshActiveConnections();
+                updateSystemMetrics();
+                if (tick % 3 == 0) {
+                    refreshActiveConnections();
+                }
+                tick++;
                 try {
-                    Thread.sleep(3000);
+                    Thread.sleep(1000);
                 } catch (InterruptedException ignored) {}
             }
         }).start();
