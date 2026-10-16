@@ -358,6 +358,7 @@ public class ServerService extends Service {
     private void broadcastLog(String log) {
         Log.d(TAG, log);
         Intent intent = new Intent(BROADCAST_STATUS);
+        intent.setPackage(getPackageName());
         intent.putExtra("type", "LOG");
         intent.putExtra("message", log);
         sendBroadcast(intent);
@@ -365,6 +366,7 @@ public class ServerService extends Service {
 
     public void broadcastStatus() {
         Intent intent = new Intent(BROADCAST_STATUS);
+        intent.setPackage(getPackageName());
         intent.putExtra("type", "STATUS");
         intent.putExtra("isRunning", isRunning);
         intent.putExtra("onionAddress", onionAddress);
@@ -393,9 +395,9 @@ public class ServerService extends Service {
         PendingIntent pi = PendingIntent.getActivity(this, 0, openIntent, PendingIntent.FLAG_IMMUTABLE);
 
         return new NotificationCompat.Builder(this, "webnode_channel")
-                .setContentTitle("Moto G86 Web Node")
+                .setContentTitle("g86")
                 .setContentText(text)
-                .setSmallIcon(R.drawable.ic_node)
+                .setSmallIcon(R.drawable.ic_stat_node)
                 .setContentIntent(pi)
                 .setOngoing(true)
                 .build();

@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_name">Moto G86 Node</string>
+    <string name="app_name">g86</string>
     <string name="channel_id">webnode_service_channel</string>
     <string name="channel_name">Server Background Service</string>
 </resources>

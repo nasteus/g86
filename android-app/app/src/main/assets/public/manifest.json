@@ -1,6 +1,6 @@
 {
-  "name": "Moto G86 Node - Portable Server",
-  "short_name": "G86",
+  "name": "g86",
+  "short_name": "g86",
   "description": "Server portabil autonom gazduit pe Moto G86 Power 5G",
   "start_url": "./index.html",
   "scope": "./",
