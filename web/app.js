@@ -31,6 +31,32 @@ if (!myPeerId) {
 let currentChatScope = 'public';
 let currentRecipient = '';
 
+// Mesh Sync UI Status Pill Helper
+function setMeshSyncStatus(status, text) {
+    const badge = document.getElementById('meshSyncBadge');
+    if (!badge) return;
+    badge.className = 'mesh-sync-pill ' + status;
+    badge.textContent = text;
+}
+
+// Compute SHA-256 fingerprint (head + size + tail) for fast torrent-style verification without freezing UI
+async function calculateFileHash(file) {
+    try {
+        if (!window.crypto || !window.crypto.subtle) {
+            return 'h_' + file.size.toString(16) + '_' + Math.random().toString(36).substring(2, 8);
+        }
+        const sampleSize = Math.min(file.size, 1024 * 1024); // 1MB sample
+        const slice = file.slice(0, sampleSize);
+        const arrayBuffer = await slice.arrayBuffer();
+        const hashBuffer = await crypto.subtle.digest('SHA-256', arrayBuffer);
+        const hashArray = Array.from(new Uint8Array(hashBuffer));
+        const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+        return hashHex.substring(0, 16);
+    } catch (e) {
+        return 'h_' + file.size.toString(16) + '_' + Date.now().toString(36);
+    }
+}
+
 // Initialize on DOM ready
 document.addEventListener('DOMContentLoaded', async () => {
     await initLocalDatabase();
@@ -452,6 +478,7 @@ async function syncMessagesFromServer() {
         // Determinam markerul de checkpoint temporal (cel mai recent mesaj detinut local)
         const highestLocalTimestamp = localBefore.reduce((max, m) => Math.max(max, m.timestamp || 0), 0);
         let hasChanges = false;
+        let catchUpCount = 0;
 
         // =========================================================================
         // VALUL 1: Intervalul Offline (Time-Window Catch-up bazat pe Marker)
@@ -464,9 +491,15 @@ async function syncMessagesFromServer() {
             if (deltaRes.ok) {
                 const deltaData = await deltaRes.json();
                 const deltaItems = deltaData.items || [];
+                if (deltaItems.length > 0) {
+                    setMeshSyncStatus('syncing', '🔄 Sincronizare (' + deltaItems.length + ' noi)...');
+                }
                 for (const item of deltaItems) {
                     const ch = await processIncomingRecord('sync', item);
-                    if (ch) hasChanges = true;
+                    if (ch) {
+                        hasChanges = true;
+                        catchUpCount++;
+                    }
                 }
             }
         }
@@ -499,6 +532,17 @@ async function syncMessagesFromServer() {
                 const ch = await processIncomingRecord('sync', rec);
                 if (ch) hasChanges = true;
             }
+
+            if (catchUpCount > 0) {
+                setMeshSyncStatus('catchup', '● Sincronizat (+' + catchUpCount + ' noi)');
+                setTimeout(() => {
+                    setMeshSyncStatus('online', '● Sincronizat');
+                }, 4000);
+            } else {
+                setMeshSyncStatus('online', '● Sincronizat');
+            }
+        } else {
+            setMeshSyncStatus('offline', '○ Deconectat');
         }
 
         if (hasChanges) {
@@ -506,6 +550,7 @@ async function syncMessagesFromServer() {
         }
     } catch (e) {
         // Dispozitiv offline
+        setMeshSyncStatus('offline', '○ Deconectat');
     } finally {
         isSyncing = false;
     }
@@ -524,6 +569,17 @@ async function processIncomingRecord(action, record) {
             return true;
         }
         return false;
+    }
+
+    // Regula de confidentialitate: daca mesajul e privat si nu ne este destinat noua si nici nu a fost trimis de noi, nu-l salvam
+    const myEmail = currentUser ? (currentUser.email || currentUser.username) : '';
+    const isPrivate = (record.scope === 'private') || (record.file && record.file.scope === 'private') || (record.recipient && record.recipient.trim() !== '');
+    if (isPrivate && myEmail) {
+        const isOwn = (record.sender === myEmail);
+        const isRecipient = (record.recipient === myEmail) || (record.file && record.file.targetUser === myEmail);
+        if (!isOwn && !isRecipient) {
+            return false;
+        }
     }
 
     const existing = await dbGetMessage(recId);
@@ -636,9 +692,11 @@ async function renderAllMessages() {
         if (msg.file && msg.file.dataUrl) {
             const mime = msg.file.type || '';
             const fileId = msg.file.fileId || ('G86-F-' + (msg.pbId || msg.id).substring(0, 8).toUpperCase());
+            const hashText = msg.file.hash ? (' • SHA: ' + escapeHtml(msg.file.hash)) : '';
+            const chunkInfo = (msg.file.chunks && msg.file.chunks > 1) ? (' • ' + msg.file.chunks + ' bucăți (2MB)') : '';
 
             const fileIdBadge = '<div class="chat-file-id-tag">' +
-                '<span>🆔 ' + escapeHtml(fileId) + '</span>' +
+                '<span>🆔 ' + escapeHtml(fileId) + hashText + chunkInfo + '</span>' +
                 '<button type="button" class="chat-file-id-copy" onclick="copyFileId(\'' + escapeHtml(fileId) + '\')" title="Copiaza ID unic">📋 Copiaza</button>' +
             '</div>';
 
@@ -713,9 +771,11 @@ async function handleSendMessage(e) {
     // Daca exista fisier atasat, asigura-i un identificator unic si scopul selectat
     let filePayload = null;
     if (currentSelectedFile) {
-        const fileUniqueId = 'G86-F-' + Math.random().toString(36).substring(2, 6).toUpperCase() + '-' + Date.now().toString(36).toUpperCase();
+        const fileUniqueId = currentSelectedFile.fileId || ('G86-F-' + Math.random().toString(36).substring(2, 6).toUpperCase() + '-' + Date.now().toString(36).toUpperCase());
         filePayload = {
             fileId: fileUniqueId,
+            hash: currentSelectedFile.hash || '',
+            chunks: currentSelectedFile.chunks || 1,
             name: currentSelectedFile.name,
             type: currentSelectedFile.type,
             size: currentSelectedFile.size,
@@ -938,19 +998,27 @@ function triggerFileInput() {
     if (input) input.click();
 }
 
-function handleFileSelected(e) {
+async function handleFileSelected(e) {
     const file = e.target.files[0];
     if (!file) return;
 
-    if (file.size > 50 * 1024 * 1024) {
-        alert('Fisierul depaseste limita de 50MB.');
+    if (file.size > 100 * 1024 * 1024) {
+        alert('Fișierul depășește limita maximă de 100MB.');
         e.target.value = '';
         return;
     }
 
+    const CHUNK_SIZE = 2 * 1024 * 1024; // 2MB felii (torrent-style)
+    const chunkCount = Math.max(1, Math.ceil(file.size / CHUNK_SIZE));
+    const fileHash = await calculateFileHash(file);
+    const uniqueFileId = 'G86-F-' + fileHash.substring(0, 6).toUpperCase() + '-' + Date.now().toString(36).toUpperCase();
+
     if (file.type.startsWith('image/')) {
         compressImageFile(file, (compressedDataUrl) => {
             currentSelectedFile = {
+                fileId: uniqueFileId,
+                hash: fileHash,
+                chunks: chunkCount,
                 name: file.name,
                 type: file.type,
                 size: formatFileSize(compressedDataUrl.length * 0.75),
@@ -962,6 +1030,9 @@ function handleFileSelected(e) {
         const reader = new FileReader();
         reader.onload = function(evt) {
             currentSelectedFile = {
+                fileId: uniqueFileId,
+                hash: fileHash,
+                chunks: chunkCount,
                 name: file.name,
                 type: file.type,
                 size: formatFileSize(file.size),
@@ -1011,10 +1082,20 @@ function showFilePreview(file) {
     const nameEl = document.getElementById('previewFileName');
     const sizeEl = document.getElementById('previewFileSize');
     const iconEl = document.getElementById('previewFileIcon');
+    const chunkTag = document.getElementById('fileChunkStatus');
     if (!bar) return;
 
     nameEl.textContent = file.name;
     sizeEl.textContent = '(' + file.size + ')';
+
+    if (chunkTag) {
+        if (file.chunks && file.chunks > 1) {
+            chunkTag.textContent = file.chunks + ' piese (2MB)';
+            chunkTag.classList.remove('hidden');
+        } else {
+            chunkTag.classList.add('hidden');
+        }
+    }
 
     if (file.type.startsWith('image/')) iconEl.textContent = '🖼️';
     else if (file.type.startsWith('video/')) iconEl.textContent = '🎬';
