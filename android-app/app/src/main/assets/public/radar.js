@@ -262,78 +262,14 @@ window.RadarEngine = (function() {
     }
 
     // =========================================================================
-    // 3. Reconstructed Room Planes (WiFiGrametrie: Podea & Pereți 3D)
+    // 3. Spatiu Reconstructie (Fara Pereti Mock-up Fake)
     // =========================================================================
     function buildReconstructedRoomPlanes() {
-        const wallMat = new THREE.MeshBasicMaterial({
-            color: 0x06b6d4,
-            wireframe: true,
-            transparent: true,
-            opacity: 0.22
-        });
-
-        // 4 Bounding Walls around current room envelope
-        const h = 2.8;
-        const w = roomBounds.maxX - roomBounds.minX;
-        const d = roomBounds.maxZ - roomBounds.minZ;
-
-        // North Wall
-        const nGeo = new THREE.PlaneGeometry(w, h, 12, 6);
-        northWallMesh = new THREE.Mesh(nGeo, wallMat);
-        northWallMesh.position.set((roomBounds.minX + roomBounds.maxX) / 2, h / 2, roomBounds.minZ);
-        roomPlanesGroup.add(northWallMesh);
-
-        // South Wall
-        const sGeo = new THREE.PlaneGeometry(w, h, 12, 6);
-        southWallMesh = new THREE.Mesh(sGeo, wallMat);
-        southWallMesh.position.set((roomBounds.minX + roomBounds.maxX) / 2, h / 2, roomBounds.maxZ);
-        roomPlanesGroup.add(southWallMesh);
-
-        // West Wall
-        const wGeo = new THREE.PlaneGeometry(d, h, 12, 6);
-        westWallMesh = new THREE.Mesh(wGeo, wallMat);
-        westWallMesh.rotation.y = Math.PI / 2;
-        westWallMesh.position.set(roomBounds.minX, h / 2, (roomBounds.minZ + roomBounds.maxZ) / 2);
-        roomPlanesGroup.add(westWallMesh);
-
-        // East Wall
-        const eGeo = new THREE.PlaneGeometry(d, h, 12, 6);
-        eastWallMesh = new THREE.Mesh(eGeo, wallMat);
-        eastWallMesh.rotation.y = -Math.PI / 2;
-        eastWallMesh.position.set(roomBounds.maxX, h / 2, (roomBounds.minZ + roomBounds.maxZ) / 2);
-        roomPlanesGroup.add(eastWallMesh);
+        // Nu mai adaugam pereti falsi/mock-up arbitrari pentru a pastra spatiul curat si autentic
     }
 
     function updateReconstructedRoomPlanes() {
-        // Expand room boundaries dynamically as the user explores
-        const margin = 3.2;
-        let changed = false;
-        if (posX - margin < roomBounds.minX) { roomBounds.minX = posX - margin; changed = true; }
-        if (posX + margin > roomBounds.maxX) { roomBounds.maxX = posX + margin; changed = true; }
-        if (posZ - margin < roomBounds.minZ) { roomBounds.minZ = posZ - margin; changed = true; }
-        if (posZ + margin > roomBounds.maxZ) { roomBounds.maxZ = posZ + margin; changed = true; }
-
-        if (changed && northWallMesh && southWallMesh && westWallMesh && eastWallMesh) {
-            const h = 2.8;
-            const w = roomBounds.maxX - roomBounds.minX;
-            const d = roomBounds.maxZ - roomBounds.minZ;
-
-            northWallMesh.geometry.dispose();
-            northWallMesh.geometry = new THREE.PlaneGeometry(w, h, 14, 6);
-            northWallMesh.position.set((roomBounds.minX + roomBounds.maxX) / 2, h / 2, roomBounds.minZ);
-
-            southWallMesh.geometry.dispose();
-            southWallMesh.geometry = new THREE.PlaneGeometry(w, h, 14, 6);
-            southWallMesh.position.set((roomBounds.minX + roomBounds.maxX) / 2, h / 2, roomBounds.maxZ);
-
-            westWallMesh.geometry.dispose();
-            westWallMesh.geometry = new THREE.PlaneGeometry(d, h, 14, 6);
-            westWallMesh.position.set(roomBounds.minX, h / 2, (roomBounds.minZ + roomBounds.maxZ) / 2);
-
-            eastWallMesh.geometry.dispose();
-            eastWallMesh.geometry = new THREE.PlaneGeometry(d, h, 14, 6);
-            eastWallMesh.position.set(roomBounds.maxX, h / 2, (roomBounds.minZ + roomBounds.maxZ) / 2);
-        }
+        // Fara pereti mock-up
     }
 
     // =========================================================================
@@ -392,16 +328,19 @@ window.RadarEngine = (function() {
         scene.add(phoneChassisGroup);
     }
 
-    function createLabelSprite(text, colorHex) {
+    let activeLabelSprites = new Set();
+    const tempLabelVec = new THREE.Vector3();
+
+    function createLabelSprite(text, colorHex, baseW = 4.2, baseH = 1.1) {
         const canvas = document.createElement('canvas');
-        canvas.width = 300;
-        canvas.height = 80;
+        canvas.width = 280;
+        canvas.height = 72;
         const ctx = canvas.getContext('2d');
         ctx.fillStyle = 'rgba(6, 9, 17, 0.9)';
-        ctx.fillRect(4, 4, 292, 72);
+        ctx.fillRect(4, 4, 272, 64);
         ctx.strokeStyle = '#' + new THREE.Color(colorHex).getHexString();
-        ctx.lineWidth = 3;
-        ctx.strokeRect(4, 4, 292, 72);
+        ctx.lineWidth = 2.5;
+        ctx.strokeRect(4, 4, 272, 64);
 
         const lines = text.split('\n');
         ctx.fillStyle = '#f8fafc';
@@ -409,22 +348,43 @@ window.RadarEngine = (function() {
         ctx.textBaseline = 'middle';
 
         if (lines.length > 1) {
-            ctx.font = 'bold 16px "Outfit", sans-serif';
-            ctx.fillText(lines[0], 150, 26);
-            ctx.font = '13px "JetBrains Mono", monospace';
+            ctx.font = 'bold 15px "Outfit", sans-serif';
+            ctx.fillText(lines[0], 140, 24);
+            ctx.font = '12px "JetBrains Mono", monospace';
             ctx.fillStyle = '#06b6d4';
-            ctx.fillText(lines[1], 150, 52);
+            ctx.fillText(lines[1], 140, 48);
         } else {
-            ctx.font = 'bold 17px "Outfit", sans-serif';
-            ctx.fillText(text, 150, 40);
+            ctx.font = 'bold 16px "Outfit", sans-serif';
+            ctx.fillText(text, 140, 36);
         }
 
         const texture = new THREE.CanvasTexture(canvas);
         const spriteMat = new THREE.SpriteMaterial({ map: texture, transparent: true, depthWrite: false });
         const sprite = new THREE.Sprite(spriteMat);
-        sprite.scale.set(5.2, 1.4, 1);
-        sprite.userData = { canvas, ctx, texture, colorHex };
+        sprite.scale.set(baseW, baseH, 1);
+        sprite.userData = { canvas, ctx, texture, colorHex, baseScaleX: baseW, baseScaleY: baseH };
+        activeLabelSprites.add(sprite);
         return sprite;
+    }
+
+    // Scalare dinamică automată: Etichetele își păstrează fix aceeași dimensiune în pixeli la orice nivel de zoom
+    function updateLabelsScale() {
+        if (!camera) return;
+        const refDist = 22.0;
+        const camPos = camera.position;
+
+        activeLabelSprites.forEach(sprite => {
+            if (!sprite.parent) {
+                activeLabelSprites.delete(sprite);
+                return;
+            }
+            sprite.getWorldPosition(tempLabelVec);
+            const dist = camPos.distanceTo(tempLabelVec);
+            const factor = Math.max(0.1, Math.min(3.0, dist / refDist));
+            const baseW = sprite.userData.baseScaleX || 4.2;
+            const baseH = sprite.userData.baseScaleY || 1.1;
+            sprite.scale.set(baseW * factor, baseH * factor, 1);
+        });
     }
 
     function updatePhoneFloatingLabel() {
@@ -935,17 +895,23 @@ window.RadarEngine = (function() {
         }
     }
 
+    // Pas detectat nativ din Android SensorManager (Hardware Step Detector)
+    window.onNativeStep = function(stride) {
+        triggerStepDisplacement(stride || 0.72);
+    };
+
     function processLinearAcceleration(lx, ly, lz) {
         const mag = Math.hypot(lx, ly, lz);
         const now = Date.now();
         const delta = Math.abs(mag - lastAccelMag);
         lastAccelMag = mag;
 
-        // Dynamic stride peak detection (sensitive threshold for room walking: 0.28 m/s²)
-        const threshold = sensorSensitivityHigh ? 0.28 : 0.45;
-        if (delta > threshold && (now - lastStepTime) > 280) {
+        // Filtru robust de pas: pasul uman real produce o acceleratie de varf intre 1.15 si 3.0 m/s2 la interval de 340-1500ms.
+        // Pragul anterior (0.28) declansa deplasari false la simpla rotire sau miscare din incheietura a telefonului!
+        const threshold = sensorSensitivityHigh ? 1.15 : 1.45;
+        if (delta > threshold && (now - lastStepTime) > 340 && (now - lastStepTime) < 1600) {
             lastStepTime = now;
-            const stride = 0.65 + Math.min(0.20, delta * 0.15);
+            const stride = 0.68 + Math.min(0.18, (delta - 1.0) * 0.1);
             triggerStepDisplacement(stride);
         }
     }
@@ -1226,6 +1192,7 @@ window.RadarEngine = (function() {
             }
         }
 
+        updateLabelsScale();
         updateCameraPosition();
         renderer.render(scene, camera);
     }

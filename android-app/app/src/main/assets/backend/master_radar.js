@@ -193,6 +193,25 @@ window.MasterRadarEngine = (function() {
     let compassSmoothingAlpha = 0.22;
     let compassFollowMode = true; // Auto-align camera view with phone compass heading
 
+    let masterPosX = 0;
+    let masterPosZ = 0;
+    let masterSteps = 0;
+    let masterDistance = 0;
+    const activeMasterLabelSprites = new Set();
+    const tempLabelVec = new THREE.Vector3();
+
+    window.onNativeStep = function(stride) {
+        stride = stride || 0.72;
+        masterSteps++;
+        masterDistance += stride;
+        const headingRad = (localHeading * Math.PI) / 180;
+        masterPosX += stride * Math.sin(headingRad);
+        masterPosZ -= stride * Math.cos(headingRad);
+        if (beaconGroup) {
+            beaconGroup.position.set(masterPosX, 0, masterPosZ);
+        }
+    };
+
     window.onNativeOrientation = function(heading, pitch, roll) {
         handleOrientation({ webkitCompassHeading: heading, beta: pitch, gamma: roll }, true);
     };
@@ -240,72 +259,20 @@ window.MasterRadarEngine = (function() {
         const sprite = new THREE.Sprite(spriteMat);
         sprite.position.set(x, 1.2, z);
         sprite.scale.set(4, 2, 1);
+        sprite.userData = { baseScaleX: 4, baseScaleY: 2 };
+        activeMasterLabelSprites.add(sprite);
         scene.add(sprite);
     }
 
     // =========================================================================
-    // 3. Reconstructed Master Room Planes (WiFiGrametrie)
+    // 3. Spatiu Reconstructie Master (Fara Pereti Mock-up)
     // =========================================================================
     function buildMasterRoomPlanes() {
-        const wallMat = new THREE.MeshBasicMaterial({
-            color: 0x06b6d4,
-            wireframe: true,
-            transparent: true,
-            opacity: 0.18
-        });
-
-        const h = 3.2;
-        const w = masterBounds.maxX - masterBounds.minX;
-        const d = masterBounds.maxZ - masterBounds.minZ;
-
-        masterNorthWall = new THREE.Mesh(new THREE.PlaneGeometry(w, h, 16, 6), wallMat);
-        masterNorthWall.position.set((masterBounds.minX + masterBounds.maxX) / 2, h / 2, masterBounds.minZ);
-        masterPlanesGroup.add(masterNorthWall);
-
-        masterSouthWall = new THREE.Mesh(new THREE.PlaneGeometry(w, h, 16, 6), wallMat);
-        masterSouthWall.position.set((masterBounds.minX + masterBounds.maxX) / 2, h / 2, masterBounds.maxZ);
-        masterPlanesGroup.add(masterSouthWall);
-
-        masterWestWall = new THREE.Mesh(new THREE.PlaneGeometry(d, h, 16, 6), wallMat);
-        masterWestWall.rotation.y = Math.PI / 2;
-        masterWestWall.position.set(masterBounds.minX, h / 2, (masterBounds.minZ + masterBounds.maxZ) / 2);
-        masterPlanesGroup.add(masterWestWall);
-
-        masterEastWall = new THREE.Mesh(new THREE.PlaneGeometry(d, h, 16, 6), wallMat);
-        masterEastWall.rotation.y = -Math.PI / 2;
-        masterEastWall.position.set(masterBounds.maxX, h / 2, (masterBounds.minZ + masterBounds.maxZ) / 2);
-        masterPlanesGroup.add(masterEastWall);
+        // Fara pereti mock-up artificiali
     }
 
     function expandMasterBoundsIfNeeded(x, z) {
-        let changed = false;
-        const margin = 4.0;
-        if (x - margin < masterBounds.minX) { masterBounds.minX = x - margin; changed = true; }
-        if (x + margin > masterBounds.maxX) { masterBounds.maxX = x + margin; changed = true; }
-        if (z - margin < masterBounds.minZ) { masterBounds.minZ = z - margin; changed = true; }
-        if (z + margin > masterBounds.maxZ) { masterBounds.maxZ = z + margin; changed = true; }
-
-        if (changed && masterNorthWall) {
-            const h = 3.2;
-            const w = masterBounds.maxX - masterBounds.minX;
-            const d = masterBounds.maxZ - masterBounds.minZ;
-
-            masterNorthWall.geometry.dispose();
-            masterNorthWall.geometry = new THREE.PlaneGeometry(w, h, 16, 6);
-            masterNorthWall.position.set((masterBounds.minX + masterBounds.maxX) / 2, h / 2, masterBounds.minZ);
-
-            masterSouthWall.geometry.dispose();
-            masterSouthWall.geometry = new THREE.PlaneGeometry(w, h, 16, 6);
-            masterSouthWall.position.set((masterBounds.minX + masterBounds.maxX) / 2, h / 2, masterBounds.maxZ);
-
-            masterWestWall.geometry.dispose();
-            masterWestWall.geometry = new THREE.PlaneGeometry(d, h, 16, 6);
-            masterWestWall.position.set(masterBounds.minX, h / 2, (masterBounds.minZ + masterBounds.maxZ) / 2);
-
-            masterEastWall.geometry.dispose();
-            masterEastWall.geometry = new THREE.PlaneGeometry(d, h, 16, 6);
-            masterEastWall.position.set(masterBounds.maxX, h / 2, (masterBounds.minZ + masterBounds.maxZ) / 2);
-        }
+        // Fara reconstructie de pereti falsi
     }
 
     // =========================================================================
@@ -337,14 +304,14 @@ window.MasterRadarEngine = (function() {
         beaconGroup.add(arrowMesh);
 
         // Floating Master Label Tag
-        const tag = createLabelSprite('🌐 MOTO G86 (NODE MASTER)\n📍 Nod Central & Sinteză', 0x8b5cf6);
+        const tag = createLabelSprite('🌐 MOTO G86 (NODE MASTER)\n📍 Nod Central & Sinteză', 0x8b5cf6, 5.2, 1.4);
         tag.position.set(0, 1.8, 0);
         beaconGroup.add(tag);
 
         scene.add(beaconGroup);
     }
 
-    function createLabelSprite(text, colorHex) {
+    function createLabelSprite(text, colorHex, baseW = 4.4, baseH = 1.2) {
         const canvas = document.createElement('canvas');
         canvas.width = 280;
         canvas.height = 76;
@@ -374,8 +341,30 @@ window.MasterRadarEngine = (function() {
         const texture = new THREE.CanvasTexture(canvas);
         const spriteMat = new THREE.SpriteMaterial({ map: texture, transparent: true, depthWrite: false });
         const sprite = new THREE.Sprite(spriteMat);
-        sprite.scale.set(5.5, 1.5, 1);
+        sprite.scale.set(baseW, baseH, 1);
+        sprite.userData = { canvas, ctx, texture, colorHex, baseScaleX: baseW, baseScaleY: baseH };
+        activeMasterLabelSprites.add(sprite);
         return sprite;
+    }
+
+    // Scalare dinamică automată: Etichetele își păstrează fix aceeași dimensiune în pixeli la orice zoom
+    function updateMasterLabelsScale() {
+        if (!camera) return;
+        const refDist = 28.0;
+        const camPos = camera.position;
+
+        activeMasterLabelSprites.forEach(sprite => {
+            if (!sprite.parent) {
+                activeMasterLabelSprites.delete(sprite);
+                return;
+            }
+            sprite.getWorldPosition(tempLabelVec);
+            const dist = camPos.distanceTo(tempLabelVec);
+            const factor = Math.max(0.12, Math.min(3.5, dist / refDist));
+            const baseW = (sprite.userData && sprite.userData.baseScaleX) || 4.4;
+            const baseH = (sprite.userData && sprite.userData.baseScaleY) || 1.2;
+            sprite.scale.set(baseW * factor, baseH * factor, 1);
+        });
     }
 
     // =========================================================================
@@ -925,6 +914,7 @@ window.MasterRadarEngine = (function() {
             // Rotește camera o dată cu orientarea telefonului (Head-Up Navigation pe ecran)
             if (compassFollowMode && !isPointerDown) {
                 cameraTheta = -headingRad + Math.PI / 2;
+                cameraTarget.lerp(beaconGroup.position, 0.08);
                 updateCameraPosition();
             }
         }
@@ -948,6 +938,7 @@ window.MasterRadarEngine = (function() {
             node.beamLine.computeLineDistances();
         });
 
+        updateMasterLabelsScale();
         renderer.render(scene, camera);
     }
 

@@ -102,8 +102,12 @@ public class MainActivity extends AppCompatActivity {
     // Hardware Sensors (Compas Absolut & 6DoF Orientare)
     private android.hardware.SensorManager sensorManager;
     private android.hardware.Sensor rotationSensor;
+    private android.hardware.Sensor stepSensor;
+    private android.hardware.Sensor linearAccelSensor;
     private android.hardware.SensorEventListener sensorListener;
+    private android.hardware.SensorEventListener stepListener;
     private long lastSensorJsTime = 0;
+    private long lastStepEventTime = 0;
     private final float[] rotationMatrix = new float[9];
     private final float[] orientationAngles = new float[3];
 
@@ -167,6 +171,8 @@ public class MainActivity extends AppCompatActivity {
             if (rotationSensor == null) {
                 rotationSensor = sensorManager.getDefaultSensor(android.hardware.Sensor.TYPE_ORIENTATION);
             }
+            stepSensor = sensorManager.getDefaultSensor(android.hardware.Sensor.TYPE_STEP_DETECTOR);
+            linearAccelSensor = sensorManager.getDefaultSensor(android.hardware.Sensor.TYPE_LINEAR_ACCELERATION);
         }
 
         sensorListener = new android.hardware.SensorEventListener() {
@@ -203,6 +209,39 @@ public class MainActivity extends AppCompatActivity {
             @Override
             public void onAccuracyChanged(android.hardware.Sensor sensor, int accuracy) {}
         };
+
+        stepListener = new android.hardware.SensorEventListener() {
+            @Override
+            public void onSensorChanged(android.hardware.SensorEvent event) {
+                if (event.sensor.getType() == android.hardware.Sensor.TYPE_STEP_DETECTOR) {
+                    long now = System.currentTimeMillis();
+                    if (now - lastStepEventTime > 260) {
+                        lastStepEventTime = now;
+                        if (webViewMasterRadar != null) {
+                            webViewMasterRadar.post(() -> webViewMasterRadar.evaluateJavascript("if(window.onNativeStep) window.onNativeStep(0.72);", null));
+                        }
+                    }
+                } else if (event.sensor.getType() == android.hardware.Sensor.TYPE_LINEAR_ACCELERATION) {
+                    if (stepSensor == null) {
+                        float ax = event.values[0];
+                        float ay = event.values[1];
+                        float az = event.values[2];
+                        float mag = (float) Math.sqrt(ax * ax + ay * ay + az * az);
+                        long now = System.currentTimeMillis();
+                        if (mag > 1.35f && (now - lastStepEventTime) > 340 && (now - lastStepEventTime) < 1600) {
+                            lastStepEventTime = now;
+                            float stride = 0.70f + Math.min(0.20f, (mag - 1.2f) * 0.1f);
+                            if (webViewMasterRadar != null) {
+                                webViewMasterRadar.post(() -> webViewMasterRadar.evaluateJavascript("if(window.onNativeStep) window.onNativeStep(" + stride + ");", null));
+                            }
+                        }
+                    }
+                }
+            }
+
+            @Override
+            public void onAccuracyChanged(android.hardware.Sensor sensor, int accuracy) {}
+        };
     }
 
     @Override
@@ -210,6 +249,13 @@ public class MainActivity extends AppCompatActivity {
         super.onResume();
         if (sensorManager != null && rotationSensor != null && sensorListener != null) {
             sensorManager.registerListener(sensorListener, rotationSensor, android.hardware.SensorManager.SENSOR_DELAY_GAME);
+        }
+        if (sensorManager != null && stepListener != null) {
+            if (stepSensor != null) {
+                sensorManager.registerListener(stepListener, stepSensor, android.hardware.SensorManager.SENSOR_DELAY_FASTEST);
+            } else if (linearAccelSensor != null) {
+                sensorManager.registerListener(stepListener, linearAccelSensor, android.hardware.SensorManager.SENSOR_DELAY_GAME);
+            }
         }
         refreshCurrentState();
         startConnectionsMonitoring();
@@ -220,6 +266,9 @@ public class MainActivity extends AppCompatActivity {
         super.onPause();
         if (sensorManager != null && sensorListener != null) {
             sensorManager.unregisterListener(sensorListener);
+        }
+        if (sensorManager != null && stepListener != null) {
+            sensorManager.unregisterListener(stepListener);
         }
         stopConnectionsMonitoring();
     }
@@ -759,6 +808,13 @@ public class MainActivity extends AppCompatActivity {
                     != PackageManager.PERMISSION_GRANTED) {
                 ActivityCompat.requestPermissions(this,
                         new String[]{Manifest.permission.POST_NOTIFICATIONS}, 101);
+            }
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACTIVITY_RECOGNITION)
+                    != PackageManager.PERMISSION_GRANTED) {
+                ActivityCompat.requestPermissions(this,
+                        new String[]{Manifest.permission.ACTIVITY_RECOGNITION}, 102);
             }
         }
 
