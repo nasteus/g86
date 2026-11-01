@@ -61,6 +61,14 @@
                         <input type="password" id="loginPassword" placeholder="••••••••" required autocomplete="current-password">
                     </div>
                     <button type="submit" class="btn btn-primary" id="btnLogin">Intră în Cont</button>
+                    <div style="display: flex; align-items: center; margin: 12px 0 8px 0; text-align: center; color: var(--text-secondary); font-size: 0.78rem;">
+                        <span style="flex: 1; border-bottom: 1px solid rgba(255,255,255,0.08);"></span>
+                        <span style="padding: 0 10px;">sau</span>
+                        <span style="flex: 1; border-bottom: 1px solid rgba(255,255,255,0.08);"></span>
+                    </div>
+                    <button type="button" class="btn btn-secondary" onclick="loginAsGuest()" style="width: 100%;">
+                        ⚡ Acces Direct Vizitator (Radar Spațial 3D)
+                    </button>
                 </form>
 
                 <!-- Register Form -->
@@ -167,7 +175,91 @@
                     </div>
                 </div>
 
-                <!-- Action Modal for Message Options (Long-Press / Click) -->
+                
+                                <!-- 3D RF Spatial Radar Accordion Card (Personal Client Radar) -->
+                <div class="radar-card" id="radarAccordionCard">
+                    <div class="radar-header" onclick="toggleRadarDropdown()">
+                        <div class="chat-title-group">
+                            <div class="chat-icon-badge radar-icon-badge">📡</div>
+                            <div class="chat-title-wrapper">
+                                <h3>Radarul Meu Spațial 3D</h3>
+                                <span class="radar-subtitle">Sinteză Point Cloud 3D &bull; Telefonul Tău în Centru &bull; Zero Cameră</span>
+                            </div>
+                        </div>
+                        <div class="chat-header-right">
+                            <div id="radarLiveBadge" class="mesh-sync-pill online">● Radar Activ</div>
+                            <div class="security-badge radar-sec-badge">
+                                <span class="sec-dot green"></span>
+                                <span>Dispozitivul Tău</span>
+                            </div>
+                            <span id="radarDropdownArrow" class="chat-arrow">▲</span>
+                        </div>
+                    </div>
+
+                    <!-- Dropdown Body -->
+                    <div id="radarDropdownBody" class="radar-dropdown-body">
+                        <!-- 3D Viewport Container -->
+                        <div class="radar-viewport-container" id="radarViewportContainer">
+                            <div id="radarCanvasContainer" class="radar-canvas-container"></div>
+                            
+                            <!-- Tactical HUD Overlay -->
+                            <div class="radar-hud">
+                                <div class="radar-hud-item">
+                                    <span class="hud-label">Orientare Busolă:</span>
+                                    <strong id="hudHeading">--° (N)</strong>
+                                </div>
+                                <div class="radar-hud-item">
+                                    <span class="hud-label">Nor Puncte 3D:</span>
+                                    <strong id="hudPointCloudCount" style="color: #06b6d4;">0 puncte</strong>
+                                </div>
+                                <div class="radar-hud-item">
+                                    <span class="hud-label">Deplasare / Pași:</span>
+                                    <strong id="hudDisplacement">0 m (0 pași)</strong>
+                                </div>
+                                <div class="radar-hud-item">
+                                    <span class="hud-label">Poziție în Cameră:</span>
+                                    <strong id="hudPositionCoords" style="color: #10b981;">X: +0.0m, Z: +0.0m</strong>
+                                </div>
+                                <div class="radar-hud-item">
+                                    <span class="hud-label">Punct de Reper Wi-Fi:</span>
+                                    <strong id="hudActiveLandmark" style="color: #a78bfa;">Wi-Fi Router AP</strong>
+                                </div>
+                                <div class="radar-hud-item">
+                                    <span class="hud-label">Latență RF Nod:</span>
+                                    <strong id="hudLatency">-- ms</strong>
+                                </div>
+                                <div class="radar-hud-item">
+                                    <span class="hud-label">Semnal Rețea:</span>
+                                    <strong id="hudSignal">Analiză...</strong>
+                                </div>
+                            </div>
+
+                            <!-- 3D Viewport Controls & Tactile Step Navigation -->
+                            <div class="radar-controls-overlay">
+                                <button type="button" class="btn-radar-tool" onclick="RadarEngine.manualStep(0.75)" title="Avansează un pas">+Pas</button>
+                                <button type="button" class="btn-radar-tool" onclick="RadarEngine.manualStep(-0.75)" title="Pas înapoi">-Pas</button>
+                                <button type="button" class="btn-radar-tool" onclick="RadarEngine.manualTurn(45)" title="Rotește orientarea cu 45°">↩️ Rotire</button>
+                                <button type="button" class="btn-radar-tool" onclick="RadarEngine.calibrateSensors()" title="Activează / Calibrează Senzorii 6DoF (Sensibilitate Ridicată)">⚡ Senzori</button>
+                                <button type="button" class="btn-radar-tool" id="btnToggleCamFollow" onclick="RadarEngine.toggleCameraFollow()" title="Comută între vedere fixă de ansamblu și urmărire">🏠 Cameră Fixă</button>
+                                <button type="button" class="btn-radar-tool" onclick="RadarEngine.setCameraView('top')" title="Vedere de sus">🧭 Top-Down</button>
+                                <button type="button" class="btn-radar-tool" onclick="RadarEngine.resetPositionToZero()" title="Resetează poziția la punctul inițial (0,0)">🎯 Reset (0,0)</button>
+                            </div>
+                        </div>
+
+                        <!-- Radar Nodes Status Bar -->
+                        <div class="radar-nodes-bar">
+                            <div class="radar-node-info">
+                                <span class="radar-node-dot client-dot"></span>
+                                <span><strong>Centru Radar:</strong> Telefonul tău (Orientare &amp; Spațiu Local)</span>
+                            </div>
+                            <div class="radar-node-info">
+                                <span class="radar-node-dot beacon-dot"></span>
+                                <span><strong>Destinație Telemetrie:</strong> Nod Master Moto G86</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+<!-- Action Modal for Message Options (Long-Press / Click) -->
                 <div id="messageActionModal" class="modal-overlay hidden" onclick="closeMessageModal(event)">
                     <div class="modal-sheet" onclick="event.stopPropagation()">
                         <div class="modal-header">
@@ -186,6 +278,8 @@
         </footer>
     </div>
 
-    <script src="app.js?v=7"></script>
+    <script src="three.min.js"></script>
+    <script src="radar.js?v=4"></script>
+    <script src="app.js?v=9"></script>
 </body>
 </html>

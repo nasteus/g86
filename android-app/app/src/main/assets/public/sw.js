@@ -1,10 +1,12 @@
 // sw.js - Service Worker for G86 PWA (Network-First for Realtime Code)
-const CACHE_NAME = 'g86-node-v5';
+const CACHE_NAME = 'g86-node-v10';
 const ASSETS_TO_CACHE = [
   './',
   './index.html',
   './style.css',
   './app.js',
+  './radar.js',
+  './three.min.js',
   './worker.js',
   './manifest.json',
   './icon-192.png',

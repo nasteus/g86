@@ -1,0 +1,22 @@
+{
+  "gateway": {
+    "type": "router",
+    "name": "Router Wi-Fi AP",
+    "ip": "192.168.1.1",
+    "signal": -42,
+    "x": 0.0,
+    "y": 0.0,
+    "z": -8.0
+  },
+  "devices": [
+    {
+      "type": "station",
+      "name": "Laptop Stație",
+      "ip": "192.168.1.100",
+      "signal": -55,
+      "x": 3.5,
+      "y": 0.0,
+      "z": -4.2
+    }
+  ]
+}

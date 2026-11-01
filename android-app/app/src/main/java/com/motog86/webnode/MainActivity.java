@@ -82,6 +82,15 @@ public class MainActivity extends AppCompatActivity {
     private LinearLayout layoutAddressesContent;
     private TextView tvAddressesArrow;
 
+    // Master 3D Spatial Synthesizer Views
+    private LinearLayout layoutMasterRadarHeader;
+    private LinearLayout layoutMasterRadarContent;
+    private TextView tvMasterRadarStatus;
+    private TextView tvMasterRadarArrow;
+    private android.webkit.WebView webViewMasterRadar;
+    private MaterialButton btnReloadMasterRadar;
+    private MaterialButton btnOpenMasterRadarExternal;
+
     private LinearLayout layoutConnectionsHeader;
     private LinearLayout layoutConnectionsContent;
     private TextView tvConnectionsTitle;
@@ -89,6 +98,14 @@ public class MainActivity extends AppCompatActivity {
     private LinearLayout layoutConnectionsList;
     private TextView tvEmptyConnections;
     private boolean isMonitoringConnections = false;
+
+    // Hardware Sensors (Compas Absolut & 6DoF Orientare)
+    private android.hardware.SensorManager sensorManager;
+    private android.hardware.Sensor rotationSensor;
+    private android.hardware.SensorEventListener sensorListener;
+    private long lastSensorJsTime = 0;
+    private final float[] rotationMatrix = new float[9];
+    private final float[] orientationAngles = new float[3];
 
     private final StringBuilder logBuilder = new StringBuilder();
 
@@ -125,6 +142,7 @@ public class MainActivity extends AppCompatActivity {
         });
 
         initViews();
+        initHardwareSensors();
         checkPermissions();
         updateBatteryAndRam();
 
@@ -139,9 +157,60 @@ public class MainActivity extends AppCompatActivity {
         startServerService();
     }
 
+    private void initHardwareSensors() {
+        sensorManager = (android.hardware.SensorManager) getSystemService(Context.SENSOR_SERVICE);
+        if (sensorManager != null) {
+            rotationSensor = sensorManager.getDefaultSensor(android.hardware.Sensor.TYPE_ROTATION_VECTOR);
+            if (rotationSensor == null) {
+                rotationSensor = sensorManager.getDefaultSensor(android.hardware.Sensor.TYPE_GEOMAGNETIC_ROTATION_VECTOR);
+            }
+            if (rotationSensor == null) {
+                rotationSensor = sensorManager.getDefaultSensor(android.hardware.Sensor.TYPE_ORIENTATION);
+            }
+        }
+
+        sensorListener = new android.hardware.SensorEventListener() {
+            @Override
+            public void onSensorChanged(android.hardware.SensorEvent event) {
+                long now = System.currentTimeMillis();
+                if (now - lastSensorJsTime < 28) return;
+                lastSensorJsTime = now;
+
+                float heading = 0;
+                float pitch = 0;
+                float roll = 0;
+
+                if (event.sensor.getType() == android.hardware.Sensor.TYPE_ROTATION_VECTOR ||
+                    event.sensor.getType() == android.hardware.Sensor.TYPE_GEOMAGNETIC_ROTATION_VECTOR) {
+                    android.hardware.SensorManager.getRotationMatrixFromVector(rotationMatrix, event.values);
+                    android.hardware.SensorManager.getOrientation(rotationMatrix, orientationAngles);
+                    heading = (float) Math.toDegrees(orientationAngles[0]);
+                    heading = (heading + 360) % 360;
+                    pitch = (float) Math.toDegrees(orientationAngles[1]);
+                    roll = (float) Math.toDegrees(orientationAngles[2]);
+                } else if (event.sensor.getType() == android.hardware.Sensor.TYPE_ORIENTATION) {
+                    heading = (event.values[0] + 360) % 360;
+                    pitch = event.values[1];
+                    roll = event.values[2];
+                }
+
+                if (webViewMasterRadar != null) {
+                    final String js = "if(window.onNativeOrientation) window.onNativeOrientation(" + heading + "," + pitch + "," + roll + ");";
+                    webViewMasterRadar.post(() -> webViewMasterRadar.evaluateJavascript(js, null));
+                }
+            }
+
+            @Override
+            public void onAccuracyChanged(android.hardware.Sensor sensor, int accuracy) {}
+        };
+    }
+
     @Override
     protected void onResume() {
         super.onResume();
+        if (sensorManager != null && rotationSensor != null && sensorListener != null) {
+            sensorManager.registerListener(sensorListener, rotationSensor, android.hardware.SensorManager.SENSOR_DELAY_GAME);
+        }
         refreshCurrentState();
         startConnectionsMonitoring();
     }
@@ -149,6 +218,9 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onPause() {
         super.onPause();
+        if (sensorManager != null && sensorListener != null) {
+            sensorManager.unregisterListener(sensorListener);
+        }
         stopConnectionsMonitoring();
     }
 
@@ -268,6 +340,70 @@ public class MainActivity extends AppCompatActivity {
             }
         });
 
+        layoutMasterRadarHeader = findViewById(R.id.layoutMasterRadarHeader);
+        layoutMasterRadarContent = findViewById(R.id.layoutMasterRadarContent);
+        tvMasterRadarStatus = findViewById(R.id.tvMasterRadarStatus);
+        tvMasterRadarArrow = findViewById(R.id.tvMasterRadarArrow);
+        webViewMasterRadar = findViewById(R.id.webViewMasterRadar);
+        btnReloadMasterRadar = findViewById(R.id.btnReloadMasterRadar);
+        btnOpenMasterRadarExternal = findViewById(R.id.btnOpenMasterRadarExternal);
+
+        if (layoutMasterRadarHeader != null) {
+            layoutMasterRadarHeader.setOnClickListener(v -> {
+                if (layoutMasterRadarContent.getVisibility() == View.VISIBLE) {
+                    layoutMasterRadarContent.setVisibility(View.GONE);
+                    tvMasterRadarArrow.setText("▼");
+                } else {
+                    layoutMasterRadarContent.setVisibility(View.VISIBLE);
+                    tvMasterRadarArrow.setText("▲");
+                }
+            });
+        }
+
+        if (webViewMasterRadar != null) {
+            android.webkit.WebSettings ws = webViewMasterRadar.getSettings();
+            ws.setJavaScriptEnabled(true);
+            ws.setDomStorageEnabled(true);
+            ws.setDatabaseEnabled(true);
+            ws.setAllowFileAccess(true);
+            ws.setAllowContentAccess(true);
+            ws.setMediaPlaybackRequiresUserGesture(false);
+            ws.setCacheMode(android.webkit.WebSettings.LOAD_DEFAULT);
+            webViewMasterRadar.setWebChromeClient(new android.webkit.WebChromeClient());
+            webViewMasterRadar.setWebViewClient(new android.webkit.WebViewClient() {
+                @Override
+                public void onReceivedError(android.webkit.WebView view, int errorCode, String description, String failingUrl) {
+                    if (ServerService.isRunning && failingUrl != null) {
+                        view.postDelayed(() -> view.loadUrl(failingUrl), 1500);
+                    }
+                }
+            });
+
+            // Previne parintele ScrollView sa intercepteze gesturile 3D touch (rotire/pan/zoom)
+            webViewMasterRadar.setOnTouchListener((v, event) -> {
+                v.getParent().requestDisallowInterceptTouchEvent(true);
+                return false;
+            });
+        }
+
+        if (btnReloadMasterRadar != null) {
+            btnReloadMasterRadar.setOnClickListener(v -> {
+                if (webViewMasterRadar != null) {
+                    webViewMasterRadar.reload();
+                }
+            });
+        }
+
+        if (btnOpenMasterRadarExternal != null) {
+            btnOpenMasterRadarExternal.setOnClickListener(v -> {
+                String target = (ServerService.localAddress != null && !ServerService.localAddress.isEmpty())
+                        ? ServerService.localAddress + "/backend/"
+                        : "http://127.0.0.1:8080/backend/";
+                Intent browserIntent = new Intent(Intent.ACTION_VIEW, android.net.Uri.parse(target));
+                startActivity(browserIntent);
+            });
+        }
+
         ivQrCode.setOnClickListener(v -> {
             String cf = ServerService.cloudflareAddress;
             String onion = ServerService.onionAddress;
@@ -307,6 +443,23 @@ public class MainActivity extends AppCompatActivity {
             tvStatus.setTextColor(ContextCompat.getColor(this, R.color.text_secondary));
             btnToggleServer.setText("Pornește");
             btnToggleServer.setBackgroundColor(ContextCompat.getColor(this, R.color.accent_emerald));
+        }
+
+        if (tvMasterRadarStatus != null) {
+            if (isRunning) {
+                tvMasterRadarStatus.setText("● Activ");
+                tvMasterRadarStatus.setTextColor(ContextCompat.getColor(this, R.color.accent_emerald));
+            } else {
+                tvMasterRadarStatus.setText("● Offline");
+                tvMasterRadarStatus.setTextColor(ContextCompat.getColor(this, R.color.text_secondary));
+            }
+        }
+
+        if (webViewMasterRadar != null && isRunning) {
+            String currentUrl = webViewMasterRadar.getUrl();
+            if (currentUrl == null || !currentUrl.contains("8080/backend")) {
+                webViewMasterRadar.loadUrl("http://127.0.0.1:8080/backend/?embed=1");
+            }
         }
 
         if (local != null && !local.isEmpty()) {

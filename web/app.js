@@ -285,6 +285,19 @@ async function handleRegister(e) {
     }
 }
 
+
+function loginAsGuest() {
+    const guestUser = {
+        id: 'guest_' + myPeerId,
+        email: 'anonim_' + myPeerId.substring(2) + '@g86.mesh',
+        username: 'Vizitator_' + myPeerId.substring(2)
+    };
+    loginSuccess(guestUser, 'guest_token');
+    if (window.RadarEngine && window.RadarEngine.init) {
+        setTimeout(window.RadarEngine.init, 200);
+    }
+}
+
 function loginSuccess(record, token) {
     currentUser = record;
     authToken = token;
@@ -558,6 +571,15 @@ async function syncMessagesFromServer() {
 
 async function processIncomingRecord(action, record) {
     if (!record) return false;
+
+    // Redirectionare telemetrie radar 3D (nu salvam in chat)
+    if (record.scope === 'radar_telemetry') {
+        if (window.RadarEngine && window.RadarEngine.onReceiveTelemetry) {
+            window.RadarEngine.onReceiveTelemetry(record);
+        }
+        return false;
+    }
+
     const recId = record.msgId || ('msg_' + record.id);
     const pbId = record.id;
 
@@ -663,6 +685,7 @@ async function renderAllMessages() {
     const myEmail = currentUser ? (currentUser.email || currentUser.username) : '';
 
     messages.forEach(msg => {
+        if (msg.scope === 'radar_telemetry') return;
         const isOwn = !!myEmail && (msg.sender === myEmail);
         const isPrivate = (msg.scope === 'private') || (msg.file && msg.file.scope === 'private') || (msg.recipient && msg.recipient.trim() !== '');
 
@@ -973,6 +996,29 @@ function autoResizeTextarea() {
 // =========================================================================
 // 9. Dropdown Toggle for Public Chat
 // =========================================================================
+
+// =========================================================================
+// Dropdown Toggle for 3D RF Spatial Radar
+// =========================================================================
+let isRadarOpen = true;
+function toggleRadarDropdown() {
+    const body = document.getElementById('radarDropdownBody');
+    const arrow = document.getElementById('radarDropdownArrow');
+    if (!body || !arrow) return;
+
+    isRadarOpen = !isRadarOpen;
+    if (isRadarOpen) {
+        body.classList.remove('collapsed');
+        arrow.textContent = '▲';
+        if (window.RadarEngine && window.RadarEngine.init) {
+            window.RadarEngine.init();
+        }
+    } else {
+        body.classList.add('collapsed');
+        arrow.textContent = '▼';
+    }
+}
+
 function toggleChatDropdown() {
     const body = document.getElementById('chatDropdownBody');
     const arrow = document.getElementById('chatDropdownArrow');

@@ -1422,4 +1422,237 @@ input:focus {
         border-radius: 6px;
         gap: 8px;
     }
-}
+}
+
+
+/* ========================================================================= */
+/* 3D RF Spatial Radar Styling                                               */
+/* ========================================================================= */
+.radar-card {
+    background: var(--card-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 14px;
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+    overflow: hidden;
+    margin-top: 18px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
+    transition: border-color 0.2s ease;
+}
+
+.radar-card:hover {
+    border-color: rgba(16, 185, 129, 0.45);
+}
+
+.radar-header {
+    padding: 16px 20px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    cursor: pointer;
+    user-select: none;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.03) 0%, transparent 100%);
+}
+
+.radar-icon-badge {
+    background: rgba(168, 85, 247, 0.15) !important;
+    border: 1px solid rgba(168, 85, 247, 0.4) !important;
+    color: #c084fc !important;
+}
+
+.radar-subtitle {
+    font-size: 0.76rem;
+    color: var(--text-secondary);
+    display: block;
+    margin-top: 2px;
+}
+
+.radar-sec-badge {
+    background: rgba(16, 185, 129, 0.1) !important;
+    border: 1px solid rgba(16, 185, 129, 0.3) !important;
+    color: var(--accent-emerald) !important;
+}
+
+.radar-dropdown-body {
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+}
+
+.radar-dropdown-body.collapsed {
+    display: none;
+}
+
+.radar-viewport-container {
+    position: relative;
+    width: 100%;
+    height: 380px;
+    background: #080d1a;
+    border-radius: 10px;
+    overflow: hidden;
+    border: 1px solid rgba(64, 84, 120, 0.4);
+    touch-action: none;
+}
+
+.radar-canvas-container {
+    width: 100%;
+    height: 100%;
+}
+
+.radar-canvas-container canvas {
+    width: 100% !important;
+    height: 100% !important;
+    display: block;
+}
+
+/* Tactical HUD Overlay */
+.radar-hud {
+    position: absolute;
+    top: 12px;
+    left: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    background: rgba(10, 14, 23, 0.75);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    border: 1px solid rgba(16, 185, 129, 0.3);
+    border-radius: 8px;
+    padding: 8px 12px;
+    pointer-events: none;
+    z-index: 5;
+}
+
+.radar-hud-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.75rem;
+    font-family: 'JetBrains Mono', monospace;
+}
+
+.radar-hud-item .hud-label {
+    color: var(--text-secondary);
+}
+
+.radar-hud-item strong {
+    color: #f8fafc;
+    font-weight: 600;
+}
+
+/* 3D Viewport Controls */
+.radar-controls-overlay {
+    position: absolute;
+    bottom: 12px;
+    right: 12px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    z-index: 5;
+    justify-content: flex-end;
+}
+
+.btn-radar-tool {
+    background: rgba(18, 24, 38, 0.85);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    color: var(--text-primary);
+    padding: 6px 12px;
+    border-radius: 6px;
+    font-size: 0.74rem;
+    font-weight: 600;
+    cursor: pointer;
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+    transition: all 0.2s ease;
+}
+
+.btn-radar-tool:hover {
+    background: rgba(30, 41, 59, 0.95);
+    border-color: rgba(16, 185, 129, 0.5);
+    color: var(--accent-emerald);
+}
+
+.btn-radar-tool.active {
+    background: rgba(16, 185, 129, 0.2);
+    border-color: var(--accent-emerald);
+    color: var(--accent-emerald);
+}
+
+.btn-radar-emit.active {
+    background: rgba(168, 85, 247, 0.25);
+    border-color: #a855f7;
+    color: #d8b4fe;
+}
+
+/* Radar Nodes Status Bar */
+.radar-nodes-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 12px;
+    background: rgba(255, 255, 255, 0.02);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    border-radius: 8px;
+    font-size: 0.78rem;
+    color: var(--text-secondary);
+}
+
+.radar-node-info {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.radar-node-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    display: inline-block;
+}
+
+.beacon-dot {
+    background-color: #a855f7;
+    box-shadow: 0 0 8px #a855f7;
+}
+
+.client-dot {
+    background-color: var(--accent-cyan);
+    box-shadow: 0 0 8px var(--accent-cyan);
+}
+
+@media (max-width: 600px) {
+    .radar-viewport-container {
+        height: 310px;
+    }
+
+    .radar-controls-overlay {
+        bottom: 8px;
+        right: 8px;
+        left: 8px;
+        justify-content: center;
+    }
+
+    .btn-radar-tool {
+        padding: 5px 8px;
+        font-size: 0.7rem;
+    }
+
+    .radar-hud {
+        padding: 6px 10px;
+        top: 8px;
+        left: 8px;
+    }
+
+    .radar-hud-item {
+        font-size: 0.68rem;
+        gap: 6px;
+    }
+
+    .radar-nodes-bar {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 6px;
+    }
+}
